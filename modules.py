@@ -144,35 +144,3 @@ class TripletAttention(nn.Module):
 
         x_out = (1/2) * (x_out11 + x_out21) if self.no_spatial else (1/3) * (x_out + x_out11 + x_out21)
         return x_out
-
-
-'''Positional Encoding
-https://pytorch.org/tutorials/beginner/transformer_tutorial.html
-
-Modified by Hiroshi Yoshihara
-'''
-class PositionalEncoding(nn.Module):
-
-    def __init__(self, dropout: float = 0.1, feature_dim=(128, 128), mode='add'):
-        super().__init__()
-        self.dropout = nn.Dropout(p=dropout)
-        position = torch.arange(feature_dim[0]).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, feature_dim[1], 2) * (-math.log(10000.0) / feature_dim[1]))
-        pe = torch.zeros((1, 1, *feature_dim), dtype=torch.float32)
-        pe[:, :, :, 0::2] = torch.sin(position * div_term)
-        pe[:, :, :, 1::2] = torch.cos(position * div_term)
-        self.register_buffer('pe', pe)
-        assert mode in ['add', 'concat']
-        self.mode = mode
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Args:
-            x: Tensor, shape [batch_size, channel, 1, dim]
-        """
-        pe = self.pe[:, :, :x.shape[-2], :x.shape[-1]]
-        if self.mode == 'add':
-            x = x + pe
-        elif self.mode == 'concat':
-            x = torch.cat([x, pe.repeat((x.shape[0], 1, 1, 1))], dim=1)
-        return self.dropout(x)
