@@ -58,7 +58,7 @@ class Baseline:
     eval_metric = AUC().torch
     monitor_metrics = []
     amp = True
-    parallel = 'ddp'
+    parallel = None
     deterministic = False
     clip_grad = 'value'
     max_grad_norm = 10000
@@ -102,14 +102,6 @@ class Channel00(Baseline):
     )
 
 
-class Leplk00(Baseline):
-    name = 'leplk_00'
-    model = create_RepLKNet31B
-    model_params = dict(
-        in_chans=3, num_classes=1
-    )
-
-
 class Aug00(Baseline):
     name = 'aug_00'
     transforms = dict(
@@ -125,4 +117,16 @@ class Aug00(Baseline):
             A.Normalize(), ToTensorV2()]),
     )
 
-    
+
+class Prep00(Aug00): # A1
+    name = 'prep_00'
+    dataset_params = dict(normalize='none', spec_diff=True, match_time=True, resize_factor=8)
+
+
+class Leplk00(Aug00): # A1
+    name = 'leplk_00'
+    model = create_RepLKNet31B
+    model_params = dict(
+        in_chans=3, num_classes=1
+    )
+    batch_size = 64
