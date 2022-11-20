@@ -205,12 +205,13 @@ if __name__ == '__main__':
     test = pd.read_csv('input/g2net-detecting-continuous-gravitational-waves/sample_submission.csv')
     ts_with_gaps = []
     for i, gid in enumerate(test['id'].values):
-        fname = Path('input/g2net-detecting-continuous-gravitational-waves/test')/f'{gid}.hdf5'
-        with h5py.File(fname, 'r') as f:
-            freq = list(f[gid]['frequency_Hz'])
-            sig_h1, time_h1 = f[gid]['H1']['SFTs'], np.array(f[gid]['H1']['timestamps_GPS'])
-            sig_l1, time_l1 = f[gid]['L1']['SFTs'], np.array(f[gid]['L1']['timestamps_GPS'])
-            ts_with_gaps.append({'H1': time_h1, 'L1': time_l1})
+        fname = Path('input/g2net-detecting-continuous-gravitational-waves/test')/f'{gid}.pickle'
+        with open(fname, 'rb') as fp:
+            f = pickle.load(fp)
+        freq = list(f[gid]['frequency_Hz'])
+        sig_h1, time_h1 = f[gid]['H1']['SFTs'], np.array(f[gid]['H1']['timestamps_GPS'])
+        sig_l1, time_l1 = f[gid]['L1']['SFTs'], np.array(f[gid]['L1']['timestamps_GPS'])
+        ts_with_gaps.append({'H1': time_h1, 'L1': time_l1})
     # generate samples
     with Pool(NUM_WORKERS) as p:
         metadata_pos = p.map(

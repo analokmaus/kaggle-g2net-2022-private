@@ -29,7 +29,7 @@ def convert_files_in_folder(target_dir):
 
 # %%
 # convert_files_in_folder(Path('input/g2net-detecting-continuous-gravitational-waves/test'))
-convert_files_in_folder(Path('input/g2net-detecting-continuous-gravitational-waves/train'))
+# convert_files_in_folder(Path('input/g2net-detecting-continuous-gravitational-waves/train'))
 # %%
 # convert_files_in_folder(Path('input/g2net-detecting-continuous-gravitational-waves/v0/'))
 
