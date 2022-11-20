@@ -7,7 +7,7 @@ from albumentations.core.transforms_interface import ImageOnlyTransform, DualTra
 
 
 class FrequencyMaskingTensor(ImageOnlyTransform):
-    def __init__(self, mask_max=72, always_apply=True, p=1.0):
+    def __init__(self, mask_max=72, always_apply=False, p=0.5):
         super().__init__(always_apply, p)
         self.mask_max = mask_max
         self.mask = FrequencyMasking(self.mask_max)
@@ -20,7 +20,7 @@ class FrequencyMaskingTensor(ImageOnlyTransform):
 
 
 class TimeMaskingTensor(ImageOnlyTransform):
-    def __init__(self, mask_max=256, always_apply=True, p=1.0):
+    def __init__(self, mask_max=256, always_apply=False, p=0.5):
         super().__init__(always_apply, p)
         self.mask_max = mask_max
         self.mask = TimeMasking(self.mask_max)

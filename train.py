@@ -269,13 +269,12 @@ if __name__ == "__main__":
         del model, trainer, valid_data; gc.collect()
         torch.cuda.empty_cache()
 
-    if opt.limit_fold < 0:
-        if opt.tta:
-            np.save(export_dir/'outoffolds_tta', outoffolds)
-            np.save(export_dir/'predictions_tta', predictions)
-        else:
-            np.save(export_dir/'outoffolds', outoffolds)
-            np.save(export_dir/'predictions', predictions)
+    if opt.tta:
+        np.save(export_dir/'outoffolds_tta', outoffolds)
+        np.save(export_dir/'predictions_tta', predictions)
+    else:
+        np.save(export_dir/'outoffolds', outoffolds)
+        np.save(export_dir/'predictions', predictions)
 
     LOGGER(f'scores: {scores}')
     LOGGER(f'mean +- std: {np.mean(scores):.5f} +- {np.std(scores):.5f}')
