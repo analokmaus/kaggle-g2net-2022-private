@@ -76,6 +76,10 @@ class G2Net2022Dataset(D.Dataset):
         else:
             pass
 
+        if self.resize_f != 1:
+            spec_h1 = spec_h1[:, :4096].reshape(360, 4096//self.resize_f, self.resize_f).mean(2)
+            spec_l1 = spec_l1[:, :4096].reshape(360, 4096//self.resize_f, self.resize_f).mean(2)
+
         if self.diff:
             img = np.stack((spec_h1, spec_l1, spec_h1 - spec_l1), axis=2) # (360, t, 3)
         else:
