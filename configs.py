@@ -18,7 +18,7 @@ from replknet import create_RepLKNet31B
 from models1d_pytorch import *
 from loss_functions import BCEWithLogitsLoss
 from metrics import AUC
-# from transforms import *
+from transforms import *
 
 
 INPUT_DIR = Path('input/').expanduser()
@@ -34,7 +34,7 @@ class Baseline:
     cv = 5
     splitter = StratifiedKFold(n_splits=cv, shuffle=True, random_state=seed)
     dataset = G2Net2022Dataset
-    dataset_params = dict(normalize='none', spec_diff=True)
+    dataset_params = dict(normalize='none', spec_diff=True, resize_factor=8)
 
     model = SimpleCNN
     model_params = dict(
@@ -58,7 +58,7 @@ class Baseline:
     eval_metric = AUC().torch
     monitor_metrics = []
     amp = True
-    parallel = None
+    parallel = 'ddp'
     deterministic = False
     clip_grad = 'value'
     max_grad_norm = 10000
@@ -70,11 +70,11 @@ class Baseline:
 
     transforms = dict(
         train=A.Compose([
-            A.Resize(360, 512), A.Normalize(), ToTensorV2()]),
+            A.Normalize(), ToTensorV2()]),
         test=A.Compose([
-            A.Resize(360, 512), A.Normalize(), ToTensorV2()]),
+            A.Normalize(), ToTensorV2()]),
         tta=A.Compose([
-            A.Resize(360, 512), A.Normalize(), ToTensorV2()]),
+            A.Normalize(), ToTensorV2()]),
     )
 
     pseudo_labels = None
@@ -83,7 +83,7 @@ class Baseline:
 
 class Channel00(Baseline):
     name = 'channel_00'
-    dataset_params = dict(normalize='local')
+    dataset_params = dict(normalize='local', resize_factor=8)
     model_params = dict(
         model_name='tf_efficientnet_b0',
         pretrained=True,
@@ -94,11 +94,11 @@ class Channel00(Baseline):
     )
     transforms = dict(
         train=A.Compose([
-            A.Resize(360, 512), ToTensorV2()]),
+            ToTensorV2()]),
         test=A.Compose([
-            A.Resize(360, 512), ToTensorV2()]),
+            ToTensorV2()]),
         tta=A.Compose([
-            A.Resize(360, 512), ToTensorV2()]),
+            ToTensorV2()]),
     )
 
 
@@ -106,6 +106,23 @@ class Leplk00(Baseline):
     name = 'leplk_00'
     model = create_RepLKNet31B
     model_params = dict(
-        num_classes=1
+        in_chans=3, num_classes=1
     )
+
+
+class Aug00(Baseline):
+    name = 'aug_00'
+    transforms = dict(
+        train=A.Compose([
+            A.HorizontalFlip(p=0.5),
+            A.VerticalFlip(p=0.5),
+            A.Normalize(), ToTensorV2(),
+            FrequencyMaskingTensor(72, p=0.5),
+            TimeMaskingTensor(128, p=0.5)]),
+        test=A.Compose([
+            A.Normalize(), ToTensorV2()]),
+        tta=A.Compose([
+            A.Normalize(), ToTensorV2()]),
+    )
+
     
