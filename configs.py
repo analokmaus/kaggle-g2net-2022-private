@@ -14,11 +14,12 @@ from kuma_utils.torch.hooks import TrainHook
 
 from datasets import G2Net2022Dataset
 from architectures import *
-from replknet import create_RepLKNet31B
+from replknet import *
 from models1d_pytorch import *
 from loss_functions import BCEWithLogitsLoss
 from metrics import AUC
 from transforms import *
+from iterstrat.ml_stratifiers import MultilabelStratifiedKFold
 
 
 INPUT_DIR = Path('input/').expanduser()
@@ -27,14 +28,16 @@ INPUT_DIR = Path('input/').expanduser()
 class Baseline:
     name = 'baseline'
     seed = 2021
-    train_path = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/v0.csv'
-    train_dir = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/v0'
+    train_path = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/train_labels.csv'
+    train_dir = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/train'
     test_path = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/sample_submission.csv'
     test_dir = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/test'
+    validate_on_train = False
     cv = 5
     splitter = StratifiedKFold(n_splits=cv, shuffle=True, random_state=seed)
+    depth_bins = None # [0, 20, 40, 60, 80, 100, 1000]
     dataset = G2Net2022Dataset
-    dataset_params = dict(normalize='none', spec_diff=True, resize_factor=8)
+    dataset_params = dict(normalize='local', resize_factor=8, spec_diff=True, match_time=False)
 
     model = SimpleCNN
     model_params = dict(
@@ -69,64 +72,70 @@ class Baseline:
     ]
 
     transforms = dict(
-        train=A.Compose([
-            A.Normalize(), ToTensorV2()]),
-        test=A.Compose([
-            A.Normalize(), ToTensorV2()]),
-        tta=A.Compose([
-            A.Normalize(), ToTensorV2()]),
+        train=A.Compose([ToTensorV2()]),
+        test=A.Compose([ToTensorV2()]),
+        tta=A.Compose([ToTensorV2()]),
     )
 
     pseudo_labels = None
     debug = False
 
 
-class Channel00(Baseline):
-    name = 'channel_00'
-    dataset_params = dict(normalize='local', resize_factor=8)
-    model_params = dict(
-        model_name='tf_efficientnet_b0',
-        pretrained=True,
-        num_classes=1,
-        timm_params=dict(
-            in_chans=2,
-        )
-    )
-    transforms = dict(
-        train=A.Compose([
-            ToTensorV2()]),
-        test=A.Compose([
-            ToTensorV2()]),
-        tta=A.Compose([
-            ToTensorV2()]),
-    )
+class Dataset00(Baseline):
+    name = 'dataset_00'
+    train_path = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/v0.csv'
+    train_dir = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/v0/'
 
 
-class Aug00(Baseline):
+class Aug00(Dataset00):
     name = 'aug_00'
     transforms = dict(
         train=A.Compose([
             A.HorizontalFlip(p=0.5),
             A.VerticalFlip(p=0.5),
-            A.Normalize(), ToTensorV2(),
+            ToTensorV2(),
             FrequencyMaskingTensor(72, p=0.5),
             TimeMaskingTensor(128, p=0.5)]),
         test=A.Compose([
-            A.Normalize(), ToTensorV2()]),
+            ToTensorV2()]),
         tta=A.Compose([
-            A.Normalize(), ToTensorV2()]),
+            ToTensorV2()]),
     )
 
 
-class Prep00(Aug00): # A1
-    name = 'prep_00'
-    dataset_params = dict(normalize='none', spec_diff=True, match_time=True, resize_factor=8)
-
-
-class Leplk00(Aug00): # A1
-    name = 'leplk_00'
-    model = create_RepLKNet31B
+class Model00(Aug00): # A1
+    name = 'model_00'
+    model = create_RepLKNet31L
     model_params = dict(
         in_chans=3, num_classes=1
     )
-    batch_size = 64
+    batch_size = 32
+
+
+class Model01(Aug00): # A1
+    name = 'model_01'
+    model_params = dict(
+        model_name='tf_efficientnet_b6_ns',
+        pretrained=True,
+        num_classes=1,
+    )
+    batch_size = 32
+
+
+class Model01ds0(Model01): # A1
+    name = 'model_01_ds0'
+    train_path = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/train_labels.csv'
+    train_dir = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/train'
+
+
+class Model01val0(Model01): # A1
+    name = 'model_01_val0'
+    splitter = MultilabelStratifiedKFold(n_splits=5, shuffle=True, random_state=Baseline.seed)
+    depth_bins = [0, 20, 40, 60, 80, 100, 1000]
+
+
+class Model01ds1(Model01val0):
+    name = 'model_01_ds1'
+    train_path = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/v1.csv'
+    train_dir = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/v1/'
+    
