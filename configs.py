@@ -139,3 +139,97 @@ class Model01ds1(Model01val0):
     train_path = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/v1.csv'
     train_dir = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/v1/'
     
+
+class Aug01(Model01ds1):
+    name = 'aug_01'
+    transforms = dict(
+        train=A.Compose([
+            A.HorizontalFlip(p=0.5),
+            A.VerticalFlip(p=0.5),
+            ShiftImage(x_max=128, y_max=180, p=0.5),
+            ToTensorV2(),
+            FrequencyMaskingTensor(72, p=0.5),
+            TimeMaskingTensor(128, p=0.5)]),
+        test=A.Compose([
+            ToTensorV2()]),
+        tta=A.Compose([
+            ToTensorV2()]),
+    )
+
+
+class Aug02(Aug01): # A2
+    name = 'aug_02'
+    dataset_params = dict(
+        normalize='local', 
+        resize_factor=8, 
+        spec_diff=True, 
+        match_time=False,
+        random_crop=True)
+
+
+class Aug02mod0(Aug02): # A2
+    name = 'aug_02_mod0'
+    dataset_params = dict(
+        normalize='local', 
+        resize_factor=8, 
+        spec_diff=False, 
+        match_time=False,
+        random_crop=True)
+    model_params = dict(
+        model_name='tf_efficientnet_b6_ns',
+        pretrained=True,
+        num_classes=1,
+        timm_params=dict(in_chans=2)
+    )
+
+
+class Aug02ds0(Aug02): # A2
+    name = 'aug_02_ds0'
+    train_path = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/v0.csv'
+    train_dir = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/v0/'
+
+
+class Aug02ds1(Aug02): # A2
+    name = 'aug_02_ds1'
+    train_path = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/train_labels.csv'
+    train_dir = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/train/'
+    
+
+class Aug03(Aug01):
+    name = 'aug_03'
+    dataset_params = dict(
+        normalize='local', 
+        resize_factor=8, 
+        spec_diff=True, 
+        match_time=False,
+        random_crop=True,
+        random_shift=True)
+
+
+class Aug04(Aug02):
+    name = 'aug_04'
+    transforms = dict(
+        train=A.Compose([
+            A.HorizontalFlip(p=0.5),
+            A.VerticalFlip(p=0.5),
+            ShiftImage(x_max=128, y_max=180, p=0.5),
+            ToTensorV2(),
+            FrequencyMaskingTensor(24, p=0.5),
+            TimeMaskingTensor(36, p=0.5),
+            FrequencyMaskingTensor(24, p=0.5),
+            TimeMaskingTensor(36, p=0.5)]),
+        test=A.Compose([
+            ToTensorV2()]),
+        tta=A.Compose([
+            ToTensorV2()]),
+    )
+
+    
+class Model02(Aug02):
+    name = 'model_02'
+    model = create_RepLKNet31L
+    model_params = dict(
+        in_chans=3, num_classes=1
+    )
+    batch_size = 32
+    weight_path = Path('input/RepLKNet-31L_ImageNet-22K.pth')

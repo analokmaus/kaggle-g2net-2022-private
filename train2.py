@@ -115,7 +115,9 @@ if __name__ == "__main__":
             else:
                 weight_path = cfg.weight_path
             LOGGER(f'{weight_path} loaded.')
-            weight = torch.load(weight_path, 'cpu')['model']
+            weight = torch.load(weight_path, 'cpu')
+            if 'model' in weight.keys():
+                weight = weight['model']
             fit_state_dict(weight, model)
             model.load_state_dict(weight, strict=False)
             del weight; gc.collect()

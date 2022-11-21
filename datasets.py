@@ -21,15 +21,22 @@ class G2Net2022Dataset(D.Dataset):
         normalize='none',
         match_time=False,
         spec_diff=False,
+        random_crop=False,
+        random_shift=False,
         resize_factor=1,
-        transforms=None):
+        is_test=False,
+        transforms=None,
+        ):
         self.df = df
         self.data_dir = data_dir
         self.norm = normalize
         self.match = match_time
         self.diff = spec_diff
+        self.random_crop = random_crop
+        self.random_shift = random_shift
         self.resize_f = resize_factor
         self.transforms = transforms
+        self.is_test = is_test
 
     def __len__(self):
         return len(self.df)
@@ -61,9 +68,17 @@ class G2Net2022Dataset(D.Dataset):
             spec_h1, spec_l1 = self._match_time(spec_h1, spec_l1, time_h1, time_l1)
         else:
             if spec_h1.shape[1] < spec_l1.shape[1]:
-                spec_l1 = spec_l1[:, :spec_h1.shape[1]]
-            else:
-                spec_h1 = spec_h1[:, :spec_l1.shape[1]]
+                if (not self.is_test) and self.random_shift:
+                    slice_start = np.random.randint(0,1)
+                    spec_l1 = spec_l1[:, slice_start:slice_start+spec_h1.shape[1]]
+                else:
+                    spec_l1 = spec_l1[:, :spec_h1.shape[1]]
+            elif spec_h1.shape[1] > spec_l1.shape[1]:
+                if (not self.is_test) and self.random_shift:
+                    slice_start = np.random.randint(0,1)
+                    spec_h1 = spec_h1[:, slice_start:slice_start+spec_l1.shape[1]]
+                else:
+                    spec_h1 = spec_h1[:, :spec_l1.shape[1]]
         
         spec_h1 = spec_h1.real**2 + spec_h1.imag**2
         spec_l1 = spec_l1.real**2 + spec_l1.imag**2
@@ -77,8 +92,13 @@ class G2Net2022Dataset(D.Dataset):
             pass
 
         if self.resize_f != 1:
-            spec_h1 = spec_h1[:, :4096].reshape(360, 4096//self.resize_f, self.resize_f).mean(2)
-            spec_l1 = spec_l1[:, :4096].reshape(360, 4096//self.resize_f, self.resize_f).mean(2)
+            if (not self.is_test) and self.random_crop:
+                slice_start = np.random.randint(0, spec_h1.shape[1] - 4096)
+            else:
+                slice_start = 0
+            spec_h1 = spec_h1[:, slice_start:slice_start+4096].reshape(360, 4096//self.resize_f, self.resize_f).mean(2)
+            spec_l1 = spec_l1[:, slice_start:slice_start+4096].reshape(360, 4096//self.resize_f, self.resize_f).mean(2)
+            
 
         if self.diff:
             img = np.stack((spec_h1, spec_l1, spec_h1 - spec_l1), axis=2) # (360, t, 3)
