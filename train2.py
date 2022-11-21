@@ -28,8 +28,6 @@ if __name__ == "__main__":
     parser.add_argument("--config", type=str, default='Baseline',
                         help="config name in configs.py")
     parser.add_argument("--num_workers", type=int, default=0)
-    parser.add_argument("--limit_fold", type=int, default=-1,
-                        help="train only specified fold")
     parser.add_argument("--inference", action='store_true',
                         help="inference")
     parser.add_argument("--tta", action='store_true', 
@@ -61,8 +59,6 @@ if __name__ == "__main__":
     ]
     if opt.debug:
         log_items += ['gpu_memory']
-    if opt.limit_fold >= 0:
-        logger_path = f'{cfg.name}_fold{opt.limit_fold}_{get_time("%y%m%d%H%M")}.log'
     else:
         logger_path = f'{cfg.name}_{get_time("%y%m%d%H%M")}.log'
     LOGGER = TorchLogger(
@@ -82,52 +78,33 @@ if __name__ == "__main__":
         train = train.iloc[:10000]
         test = test.iloc[:1000]
     train = train.loc[train['target'] != -1]
-    splitter = cfg.splitter
-    if cfg.depth_bins is None:
-        fold_iter = list(splitter.split(X=train, y=train['target']))
-    else:
-        targets = pd.get_dummies(pd.cut(train['signal_depth'], [0, 20, 40, 60, 80, 100, 1000]))
-        fold_iter = list(splitter.split(X=train, y=targets))
-    with open(export_dir/'folds.pickle', 'wb') as f:
-        pickle.dump(fold_iter, f)
+    valid = pd.read_csv('input/g2net-detecting-continuous-gravitational-waves/train_labels.csv')
+    valid = valid.loc[valid['target'] != -1]
+    valid_dir = Path('input/g2net-detecting-continuous-gravitational-waves/train')
     
     '''
     Training
     '''
     scores = []
-    for fold, (train_idx, valid_idx) in enumerate(fold_iter):
-        
-        if opt.limit_fold >= 0 and fold != opt.limit_fold:
-            continue  # skip fold
+    train_data = cfg.dataset(
+        df=train, data_dir=cfg.train_dir,
+        transforms=cfg.transforms['train'], **cfg.dataset_params)
+    valid_data = cfg.dataset(
+        df=valid, data_dir = valid_dir,
+        transforms=cfg.transforms['test'], **cfg.dataset_params)
 
-        if opt.inference:
-            continue
-
-        if opt.skip_existing and (export_dir/f'fold{fold}.pt').exists():
-            LOGGER(f'checkpoint fold{fold}.pt already exists.')
-            continue
+    train_loader = D.DataLoader(
+        train_data, batch_size=cfg.batch_size, shuffle=True,
+        num_workers=opt.num_workers, pin_memory=False)
+    valid_loader = D.DataLoader(
+        valid_data, batch_size=cfg.batch_size, shuffle=False,
+        num_workers=opt.num_workers, pin_memory=False)
+    fold = 0
+    if opt.skip_existing and (export_dir/f'fold{fold}.pt').exists():
+        LOGGER(f'checkpoint fold{fold}.pt already exists.')
+    else:
 
         LOGGER(f'===== TRAINING FOLD {fold} =====')
-
-        train_fold = train.iloc[train_idx]
-        valid_fold = train.iloc[valid_idx]
-
-        LOGGER(f'train positive: {train_fold.target.values.mean(0)} ({len(train_fold)})')
-        LOGGER(f'valid positive: {valid_fold.target.values.mean(0)} ({len(valid_fold)})')
-
-        train_data = cfg.dataset(
-            df=train_fold, data_dir=cfg.train_dir,
-            transforms=cfg.transforms['train'], **cfg.dataset_params)
-        valid_data = cfg.dataset(
-            df=valid_fold, data_dir = cfg.train_dir,
-            transforms=cfg.transforms['test'], **cfg.dataset_params)
-
-        train_loader = D.DataLoader(
-            train_data, batch_size=cfg.batch_size, shuffle=True,
-            num_workers=opt.num_workers, pin_memory=False)
-        valid_loader = D.DataLoader(
-            valid_data, batch_size=cfg.batch_size, shuffle=False,
-            num_workers=opt.num_workers, pin_memory=False)
 
         model = cfg.model(**cfg.model_params)
 
@@ -169,20 +146,12 @@ if __name__ == "__main__":
             'progress_bar': opt.progress_bar, 
             'resume': opt.resume
         }
-        if not cfg.debug:
-            notify_me(f'[{cfg.name}:fold{opt.limit_fold}]\nTraining started.')
         try:
             trainer = TorchTrainer(model, serial=f'fold{fold}', device=None)
             trainer.fit(**FIT_PARAMS)
         except Exception as e:
             err = traceback.format_exc()
             LOGGER(err)
-            if not opt.silent:
-                notify_me('\n'.join([
-                    f'[{cfg.name}:fold{opt.limit_fold}]', 
-                    'Training stopped due to:', 
-                    f'{traceback.format_exception_only(type(e), e)}'
-                ]))
         del model, trainer, train_data, valid_data; gc.collect()
         torch.cuda.empty_cache()
 
@@ -190,48 +159,28 @@ if __name__ == "__main__":
     '''
     Inference
     '''
-    predictions = np.full((cfg.cv, len(test), 1), 0.5, dtype=np.float32)
-    outoffolds = np.full((len(train), 1), 0.5, dtype=np.float32)
+    predictions = np.full((len(test), 1), 0.5, dtype=np.float32)
+    outoffolds = np.full((len(valid), 1), 0.5, dtype=np.float32)
     test_data = cfg.dataset(
         df=test, data_dir=cfg.test_dir,
         transforms=cfg.transforms['test'], **cfg.dataset_params)
+    test_loader = D.DataLoader(
+        test_data, batch_size=cfg.batch_size, shuffle=False, 
+        num_workers=opt.num_workers, pin_memory=False)
+    fold = 0
 
-    for fold, (train_idx, valid_idx) in enumerate(fold_iter):
-
-        # if opt.limit_fold >= 0:
-        #     if fold == 0:
-        #         checkpoint = torch.load(export_dir/f'fold{opt.limit_fold}.pt', 'cpu')
-        #         scores.append(checkpoint['state']['best_score'])
-        #     continue
-        if opt.limit_fold >= 0 and fold != opt.limit_fold:
-            continue  # skip fold
-
-        if not (export_dir/f'fold{fold}.pt').exists():
-            LOGGER(f'fold{fold}.pt missing. No target to predict.')
-            continue
+    if not (export_dir/f'fold{fold}.pt').exists():
+        LOGGER(f'fold{fold}.pt missing. No target to predict.')
+        pass
+    
+    else:
 
         LOGGER(f'===== INFERENCE FOLD {fold} =====')
-
-        valid_fold = train.iloc[valid_idx]
-        valid_data = cfg.dataset(
-            df=valid_fold, data_dir = cfg.train_dir,
-            transforms=cfg.transforms['test'], **cfg.dataset_params)
-        valid_loader = D.DataLoader(
-            valid_data, batch_size=cfg.batch_size, shuffle=False,
-            num_workers=opt.num_workers, pin_memory=False)
-        test_loader = D.DataLoader(
-            test_data, batch_size=cfg.batch_size, shuffle=False, 
-            num_workers=opt.num_workers, pin_memory=False)
 
         model = cfg.model(**cfg.model_params)
         checkpoint = torch.load(export_dir/f'fold{fold}.pt', 'cpu')
         fit_state_dict(checkpoint['model'], model)
-        try:
-            model.load_state_dict(checkpoint['model'])
-        except: # drop preprocess module for compatibility
-            model.cnn = nn.Sequential(
-                *[model.cnn[i+1] for i in range(len(model.cnn)-1)])
-            model.load_state_dict(checkpoint['model'])
+        model.load_state_dict(checkpoint['model'])
         scores.append(checkpoint['state']['best_score'])
         del checkpoint; gc.collect()
         if cfg.parallel == 'ddp':
@@ -267,10 +216,10 @@ if __name__ == "__main__":
             prediction_fold = trainer.predict(test_loader, progress_bar=opt.progress_bar)
             outoffold = trainer.predict(valid_loader, progress_bar=opt.progress_bar)
 
-        predictions[fold] = prediction_fold
-        outoffolds[valid_idx] = outoffold
+        predictions = prediction_fold
+        outoffolds = outoffold
 
-        del model, trainer, valid_data; gc.collect()
+        del model, trainer; gc.collect()
         torch.cuda.empty_cache()
 
     if opt.tta:
@@ -282,9 +231,3 @@ if __name__ == "__main__":
 
     LOGGER(f'scores: {scores}')
     LOGGER(f'mean +- std: {np.mean(scores):.5f} +- {np.std(scores):.5f}')
-    if not cfg.debug:
-        notify_me('\n'.join([
-            f'[{cfg.name}:fold{opt.limit_fold}]',
-            'Training has finished successfully.',
-            f'mean +- std: {np.mean(scores):.5f} +- {np.std(scores):.5f}'
-        ]))
