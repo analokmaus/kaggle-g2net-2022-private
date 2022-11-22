@@ -88,10 +88,10 @@ if __name__ == "__main__":
     scores = []
     train_data = cfg.dataset(
         df=train, data_dir=cfg.train_dir,
-        transforms=cfg.transforms['train'], **cfg.dataset_params)
+        transforms=cfg.transforms['train'], is_test=False, **cfg.dataset_params)
     valid_data = cfg.dataset(
         df=valid, data_dir = valid_dir,
-        transforms=cfg.transforms['test'], **cfg.dataset_params)
+        transforms=cfg.transforms['test'], is_test=True, **cfg.dataset_params)
 
     train_loader = D.DataLoader(
         train_data, batch_size=cfg.batch_size, shuffle=True,
@@ -165,7 +165,7 @@ if __name__ == "__main__":
     outoffolds = np.full((len(valid), 1), 0.5, dtype=np.float32)
     test_data = cfg.dataset(
         df=test, data_dir=cfg.test_dir,
-        transforms=cfg.transforms['test'], **cfg.dataset_params)
+        transforms=cfg.transforms['test'], is_test=True, **cfg.dataset_params)
     test_loader = D.DataLoader(
         test_data, batch_size=cfg.batch_size, shuffle=False, 
         num_workers=opt.num_workers, pin_memory=False)

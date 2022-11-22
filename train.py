@@ -117,10 +117,10 @@ if __name__ == "__main__":
 
         train_data = cfg.dataset(
             df=train_fold, data_dir=cfg.train_dir,
-            transforms=cfg.transforms['train'], **cfg.dataset_params)
+            transforms=cfg.transforms['train'], is_test=False, **cfg.dataset_params)
         valid_data = cfg.dataset(
             df=valid_fold, data_dir = cfg.train_dir,
-            transforms=cfg.transforms['test'], **cfg.dataset_params)
+            transforms=cfg.transforms['test'], is_test=True, **cfg.dataset_params)
 
         train_loader = D.DataLoader(
             train_data, batch_size=cfg.batch_size, shuffle=True,
@@ -196,7 +196,7 @@ if __name__ == "__main__":
     outoffolds = np.full((len(train), 1), 0.5, dtype=np.float32)
     test_data = cfg.dataset(
         df=test, data_dir=cfg.test_dir,
-        transforms=cfg.transforms['test'], **cfg.dataset_params)
+        transforms=cfg.transforms['test'], is_test=True, **cfg.dataset_params)
 
     for fold, (train_idx, valid_idx) in enumerate(fold_iter):
 
@@ -217,7 +217,7 @@ if __name__ == "__main__":
         valid_fold = train.iloc[valid_idx]
         valid_data = cfg.dataset(
             df=valid_fold, data_dir = cfg.train_dir,
-            transforms=cfg.transforms['test'], **cfg.dataset_params)
+            transforms=cfg.transforms['test'], is_test=True, **cfg.dataset_params)
         valid_loader = D.DataLoader(
             valid_data, batch_size=cfg.batch_size, shuffle=False,
             num_workers=opt.num_workers, pin_memory=False)

@@ -193,6 +193,8 @@ class Aug02ds1(Aug02): # A2
     name = 'aug_02_ds1'
     train_path = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/train_labels.csv'
     train_dir = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/train/'
+    splitter = StratifiedKFold(n_splits=5, shuffle=True, random_state=Baseline.seed)
+    depth_bins = None
     
 
 class Aug03(Aug01):
@@ -223,6 +225,84 @@ class Aug04(Aug02):
         tta=A.Compose([
             ToTensorV2()]),
     )
+
+
+class Aug04mod0(Aug04):
+    name = 'aug_04_mod0'
+    dataset_params = dict(
+        normalize='local', 
+        resize_factor=8, 
+        spec_diff=False, 
+        match_time=False,
+        random_crop=True)
+    model_params = dict(
+        model_name='tf_efficientnet_b6_ns',
+        pretrained=True,
+        num_classes=1,
+        timm_params=dict(in_chans=2)
+    )
+
+
+class Aug05(Aug04):
+    name = 'aug_05'
+    transforms = dict(
+        train=A.Compose([
+            A.HorizontalFlip(p=0.5),
+            A.VerticalFlip(p=0.5),
+            ShiftImage(x_max=128, y_max=180, p=0.5),
+            ToTensorV2(),
+            FrequencyMaskingTensor(36, p=0.5),
+            TimeMaskingTensor(48, p=0.5),
+            FrequencyMaskingTensor(36, p=0.5),
+            TimeMaskingTensor(48, p=0.5)]),
+        test=A.Compose([
+            ToTensorV2()]),
+        tta=A.Compose([
+            ToTensorV2()]),
+    )
+
+
+class Aug06(Aug04):
+    name = 'aug_06'
+    transforms = dict(
+        train=A.Compose([
+            A.HorizontalFlip(p=0.5),
+            A.VerticalFlip(p=0.5),
+            ShiftImage(x_max=128, y_max=180, p=0.5),
+            ToTensorV2(),
+            FrequencyMaskingTensor(24, p=0.5),
+            TimeMaskingTensor(36, p=0.5),
+            FrequencyMaskingTensor(24, p=0.5),
+            TimeMaskingTensor(36, p=0.5),
+            FrequencyMaskingTensor(24, p=0.5),
+            TimeMaskingTensor(36, p=0.5)]),
+        test=A.Compose([
+            ToTensorV2()]),
+        tta=A.Compose([
+            ToTensorV2()]),
+    )
+
+
+class Aug07(Aug04):
+    name = 'aug_07'
+    transforms = dict(
+        train=A.Compose([
+            A.HorizontalFlip(p=0.5),
+            A.VerticalFlip(p=0.5),
+            ShiftImage(x_max=128, y_max=180, p=0.5),
+            ToTensorV2(),
+            FrequencyMaskingTensor(12, p=0.5),
+            TimeMaskingTensor(18, p=0.5),
+            FrequencyMaskingTensor(12, p=0.5),
+            TimeMaskingTensor(18, p=0.5),
+            FrequencyMaskingTensor(12, p=0.5),
+            TimeMaskingTensor(18, p=0.5)]),
+        test=A.Compose([
+            ToTensorV2()]),
+        tta=A.Compose([
+            ToTensorV2()]),
+    )
+
 
     
 class Model02(Aug02):
