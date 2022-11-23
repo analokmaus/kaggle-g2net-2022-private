@@ -12,7 +12,7 @@ from kuma_utils.torch.callbacks import (
     EarlyStopping, SaveSnapshot, SaveEveryEpoch, SaveAllSnapshots)
 from kuma_utils.torch.hooks import TrainHook
 
-from datasets import G2Net2022Dataset
+from datasets import G2Net2022Dataset, G2Net2022Dataset2
 from architectures import *
 from replknet import *
 from models1d_pytorch import *
@@ -210,19 +210,28 @@ class Aug03(Aug01):
 
 class Aug04(Aug02):
     name = 'aug_04'
+    dataset_params = dict(
+        normalize='local', 
+        resize_factor=8, 
+        spec_diff=True, 
+        match_time=False,
+        random_crop=False)
     transforms = dict(
         train=A.Compose([
             A.HorizontalFlip(p=0.5),
             A.VerticalFlip(p=0.5),
             ShiftImage(x_max=128, y_max=180, p=0.5),
+            RandomCrop(512),
             ToTensorV2(),
             FrequencyMaskingTensor(24, p=0.5),
             TimeMaskingTensor(36, p=0.5),
             FrequencyMaskingTensor(24, p=0.5),
             TimeMaskingTensor(36, p=0.5)]),
         test=A.Compose([
+            CropImage(512),
             ToTensorV2()]),
         tta=A.Compose([
+            CropImage(512),
             ToTensorV2()]),
     )
 
@@ -235,6 +244,106 @@ class Aug04mod0(Aug04):
         spec_diff=False, 
         match_time=False,
         random_crop=True)
+    model_params = dict(
+        model_name='tf_efficientnet_b6_ns',
+        pretrained=True,
+        num_classes=1,
+        timm_params=dict(in_chans=2)
+    )
+
+
+class Aug04ds0(Aug04):
+    name = 'aug_04_ds0'
+    train_path = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/v0.csv'
+    train_dir = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/v0/'
+
+
+class Aug04ds1(Aug04):
+    name = 'aug_04_ds1'
+    train_path = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/v2.csv'
+    train_dir = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/v2/'
+
+
+class Aug04ds2(Aug04):
+    name = 'aug_04_ds2'
+    train_path = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/v1_cutoff_005.csv'
+    train_dir = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/v1/'
+
+
+class Aug04ds3(Aug04):
+    name = 'aug_04_ds3'
+    dataset = G2Net2022Dataset2
+    train_path = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/concat_v0_v1_v2.csv'
+    train_dir = None
+    test_path = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/test.csv'
+    test_dir = None
+
+
+class Aug04prep0(Aug04):
+    name = 'aug_04_prep0'
+    dataset_params = dict(
+        normalize='local', 
+        resize_factor=8, 
+        spec_diff=True, 
+        match_time=True)
+
+
+class Aug04prep1(Aug04):
+    name = 'aug_04_prep1'
+    dataset_params = dict(
+        normalize='laeyoung', 
+        resize_factor=8, 
+        spec_diff=True, 
+        match_time=True,
+        fillna=True)
+
+
+class Aug04prep2(Aug04):
+    name = 'aug_04_prep2'
+    dataset_params = dict(
+        normalize='laeyoung', 
+        resize_factor=10, 
+        spec_diff=True, 
+        match_time=True,
+        fillna=True)
+    transforms = dict(
+        train=A.Compose([
+            A.HorizontalFlip(p=0.5),
+            A.VerticalFlip(p=0.5),
+            ShiftImage(x_max=128, y_max=180, p=0.5),
+            RandomCrop(512),
+            ToTensorV2(),
+            FrequencyMaskingTensor(24, p=0.5),
+            TimeMaskingTensor(36, p=0.5),
+            FrequencyMaskingTensor(24, p=0.5),
+            TimeMaskingTensor(36, p=0.5)]),
+        test=A.Compose([
+            CropImage(512),
+            ToTensorV2()]),
+        tta=A.Compose([
+            CropImage(512),
+            ToTensorV2()]),
+    )
+
+
+class Aug04mod1(Aug04):
+    name = 'aug_04_mod1'
+    model = create_RepLKNet31L
+    model_params = dict(
+        in_chans=3, num_classes=1
+    )
+    batch_size = 32
+    weight_path = Path('input/RepLKNet-31L_ImageNet-22K.pth')
+
+
+class Aug04mod2(Aug04prep2):
+    name = 'aug_04_mod2'
+    dataset_params = dict(
+        normalize='laeyoung', 
+        resize_factor=8, 
+        spec_diff=False, 
+        match_time=True,
+        fillna=True)
     model_params = dict(
         model_name='tf_efficientnet_b6_ns',
         pretrained=True,
@@ -281,6 +390,12 @@ class Aug06(Aug04):
         tta=A.Compose([
             ToTensorV2()]),
     )
+
+
+class Aug06ds0(Aug06):
+    name = 'aug_06_ds0'
+    train_path = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/v2.csv'
+    train_dir = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/v2/'
 
 
 class Aug07(Aug04):
