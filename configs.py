@@ -16,7 +16,7 @@ from datasets import G2Net2022Dataset, G2Net2022Dataset2
 from architectures import *
 from replknet import *
 from models1d_pytorch import *
-from loss_functions import BCEWithLogitsLoss
+from loss_functions import BCEWithLogitsLoss, FocalLoss
 from metrics import AUC
 from transforms import *
 from iterstrat.ml_stratifiers import MultilabelStratifiedKFold
@@ -67,7 +67,7 @@ class Baseline:
     max_grad_norm = 10000
     hook = TrainHook()
     callbacks = [
-        EarlyStopping(patience=5, maximize=True),
+        EarlyStopping(patience=5, maximize=True, skip_epoch=4),
         SaveSnapshot()
     ]
 
@@ -279,6 +279,15 @@ class Aug04ds3(Aug04):
     test_dir = None
 
 
+class Aug04ds4(Aug04):
+    name = 'aug_04_ds4'
+    dataset = G2Net2022Dataset2
+    train_path = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/concat_v0_v1.csv'
+    train_dir = None
+    test_path = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/test.csv'
+    test_dir = None
+
+
 class Aug04prep0(Aug04):
     name = 'aug_04_prep0'
     dataset_params = dict(
@@ -418,6 +427,170 @@ class Aug07(Aug04):
             ToTensorV2()]),
     )
 
+
+class Aug08(Aug04):
+    name = 'aug_08'
+    dataset_params = dict(
+        normalize='local', 
+        resize_factor=4, 
+        spec_diff=True, 
+        match_time=False)
+    transforms = dict(
+        train=A.Compose([
+            A.HorizontalFlip(p=0.5),
+            A.VerticalFlip(p=0.5),
+            ShiftImage(x_max=512, y_max=180, p=0.5),
+            RandomCrop(1024),
+            ToTensorV2(),
+            FrequencyMaskingTensor(24, p=0.5),
+            TimeMaskingTensor(72, p=0.5),
+            FrequencyMaskingTensor(24, p=0.5),
+            TimeMaskingTensor(72, p=0.5)]),
+        test=A.Compose([
+            CropImage(1024),
+            ToTensorV2()]),
+        tta=A.Compose([
+            CropImage(1024),
+            ToTensorV2()]),
+    )
+    batch_size = 16
+    optimizer_params = dict(lr=2e-4, weight_decay=1e-6)
+
+
+class Aug09(Aug08):
+    name = 'aug_09'
+    dataset_params = dict(
+        normalize='laeyoung', 
+        resize_factor=4, 
+        spec_diff=True, 
+        match_time=False,
+        random_crop=False)
+
+
+class Aug09prep0(Aug09):
+    name = 'aug_09_prep0'
+    dataset_params = dict(
+        normalize='laeyoung', 
+        resize_factor=5, 
+        spec_diff=True, 
+        match_time=True)
+
+
+class Aug10(Aug04):
+    name = 'aug_10'
+    transforms = dict(
+        train=A.Compose([
+            A.HorizontalFlip(p=0.5),
+            A.VerticalFlip(p=0.5),
+            ShiftImage(x_max=256, y_max=180, p=0.5),
+            RandomCrop(512),
+            ToTensorV2(),
+            FrequencyMaskingTensor(24, p=0.5),
+            TimeMaskingTensor(48, p=0.5),
+            FrequencyMaskingTensor(24, p=0.5),
+            TimeMaskingTensor(48, p=0.5),
+            TimeMaskingTensor(48, p=0.2),]),
+        test=A.Compose([
+            CropImage(512),
+            ToTensorV2()]),
+        tta=A.Compose([
+            CropImage(512),
+            ToTensorV2()]),
+    )
+
+
+class Aug11(Aug04):
+    name = 'aug_11'
+    dataset_params = dict(
+        normalize='local', 
+        resize_factor=16, 
+        spec_diff=True, 
+        match_time=False)
+    transforms = dict(
+        train=A.Compose([
+            A.HorizontalFlip(p=0.5),
+            A.VerticalFlip(p=0.5),
+            ShiftImage(x_max=128, y_max=180, p=0.5),
+            RandomCrop(256),
+            ToTensorV2(),
+            FrequencyMaskingTensor(12, p=0.5),
+            TimeMaskingTensor(24, p=0.5),
+            FrequencyMaskingTensor(12, p=0.5),
+            TimeMaskingTensor(24, p=0.5),
+            TimeMaskingTensor(24, p=0.2)]),
+        test=A.Compose([
+            CropImage(256),
+            ToTensorV2()]),
+        tta=A.Compose([
+            CropImage(256),
+            ToTensorV2()]),
+    )
+
+
+class Aug11prep0(Aug11):
+    name = 'aug_11_prep0'
+    dataset_params = dict(
+        normalize='local', 
+        resize_factor=16, 
+        resize_method='max',
+        spec_diff=True, 
+        match_time=False)
+
+    
+class Aug11loss0(Aug11):
+    name = 'aug_11_loss0'
+    criterion = FocalLoss()
+
+
+class Aug11loss1(Aug11):
+    name = 'aug_11_loss1'
+    criterion = BCEWithLogitsLoss(smooth_eps=0.05)
+
+
+class Aug11lr0(Aug11):
+    name = 'aug_11_lr0'
+    optimizer_params = dict(lr=2e-4, weight_decay=1e-6)
+
+
+class Aug11lr1(Aug11):
+    name = 'aug_11_lr1'
+    optimizer_params = dict(lr=1e-3, weight_decay=1e-6)
+
+
+class Aug11ds0(Aug11):
+    name = 'aug_11_ds0'
+    train_path = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/v3.csv'
+    train_dir = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/v3/'
+
+
+class Aug12(Aug04):
+    name = 'aug_12'
+    dataset_params = dict(
+        normalize='local', 
+        resize_factor=2, 
+        spec_diff=True, 
+        match_time=False)
+    transforms = dict(
+        train=A.Compose([
+            A.HorizontalFlip(p=0.5),
+            A.VerticalFlip(p=0.5),
+            ShiftImage(x_max=1024, y_max=180, p=0.5),
+            RandomCrop(2048),
+            ToTensorV2(),
+            FrequencyMaskingTensor(24, p=0.5),
+            TimeMaskingTensor(216, p=0.5),
+            FrequencyMaskingTensor(24, p=0.5),
+            TimeMaskingTensor(216, p=0.5),
+            TimeMaskingTensor(216, p=0.25),]),
+        test=A.Compose([
+            CropImage(2048),
+            ToTensorV2()]),
+        tta=A.Compose([
+            CropImage(2048),
+            ToTensorV2()]),
+    )
+    batch_size = 8
+    optimizer_params = dict(lr=2e-4, weight_decay=1e-6)
 
     
 class Model02(Aug02):

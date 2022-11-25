@@ -13,12 +13,12 @@ warnings.filterwarnings("ignore")
 from copy import deepcopy
 import pickle
 import traceback
+import albumentations as A
 
 from kuma_utils.torch import TorchTrainer, TorchLogger
 from kuma_utils.torch.utils import get_time, seed_everything, fit_state_dict
 
 from configs import *
-# from transforms import Compose, FlipWave
 from utils import print_config, notify_me
 from training_extras import make_tta_dataloader
 
@@ -78,7 +78,7 @@ if __name__ == "__main__":
         train = train.iloc[:10000]
         test = test.iloc[:1000]
     train = train.loc[train['target'] != -1]
-    valid = pd.read_csv('input/g2net-detecting-continuous-gravitational-waves/train_labels.csv')
+    valid = pd.read_csv('input/g2net-detecting-continuous-gravitational-waves/train.csv')
     valid = valid.loc[valid['target'] != -1]
     valid_dir = Path('input/g2net-detecting-continuous-gravitational-waves/train')
     
@@ -162,6 +162,7 @@ if __name__ == "__main__":
     Inference
     '''
     predictions = np.full((len(test), 1), 0.5, dtype=np.float32)
+    predictions_tta = np.full((len(test), 1), 0.5, dtype=np.float32)
     outoffolds = np.full((len(valid), 1), 0.5, dtype=np.float32)
     test_data = cfg.dataset(
         df=test, data_dir=cfg.test_dir,
@@ -192,31 +193,32 @@ if __name__ == "__main__":
         trainer.register(hook=cfg.hook, callbacks=cfg.callbacks)
 
         if opt.tta: # flip wave TTA
-            # tta_transform = Compose(
-            #     cfg.transforms['test'].transforms + [FlipWave(always_apply=True)])
-            # LOGGER(f'[{fold}] pred0 {test_loader.dataset.transforms}')
-            # prediction0 = trainer.predict(test_loader, progress_bar=opt.progress_bar)
-            # test_loader = make_tta_dataloader(test_loader, cfg.dataset, dict(
-            #     paths=test['path'].values, transforms=tta_transform, 
-            #     cache=test_cache, is_test=True, **cfg.dataset_params
-            # ))
-            # LOGGER(f'[{fold}] pred1 {test_loader.dataset.transforms}')
-            # prediction1 = trainer.predict(test_loader, progress_bar=opt.progress_bar)
-            # prediction_fold = (prediction0 + prediction1) / 2
+            LOGGER(f'[{fold}] pred0 {test_loader.dataset.transforms}')
+            prediction0 = trainer.predict(test_loader, progress_bar=opt.progress_bar)
 
-            # LOGGER(f'[{fold}] oof0 {valid_loader.dataset.transforms}')
-            # outoffold0 = trainer.predict(valid_loader, progress_bar=opt.progress_bar)
-            # valid_loader = make_tta_dataloader(valid_loader, cfg.dataset, dict(
-            #     paths=valid_fold['path'].values, targets=valid_fold['target'].values,
-            #     cache=train_cache, transforms=tta_transform, is_test=True,
-            #     **cfg.dataset_params))
-            # LOGGER(f'[{fold}] oof1 {valid_loader.dataset.transforms}')
-            # outoffold1 = trainer.predict(valid_loader, progress_bar=opt.progress_bar)
-            # outoffold = (outoffold0 + outoffold1) / 2
-            pass
+            tta_transforms = A.Compose(
+                [A.HorizontalFlip(p=1)] + cfg.transforms['test'].transforms
+            )
+            test_loader = make_tta_dataloader(test_loader, cfg.dataset, dict(
+                df=test, data_dir=cfg.test_dir,
+                transforms=tta_transforms, is_test=True, **cfg.dataset_params))
+            LOGGER(f'[{fold}] pred1 {test_loader.dataset.transforms}')
+            prediction1 = trainer.predict(test_loader, progress_bar=opt.progress_bar)
+
+            tta_transforms = A.Compose(
+                [A.VerticalFlip(p=1)] + cfg.transforms['test'].transforms
+            )
+            test_loader = make_tta_dataloader(test_loader, cfg.dataset, dict(
+                df=test, data_dir=cfg.test_dir,
+                transforms=tta_transforms, is_test=True, **cfg.dataset_params))
+            LOGGER(f'[{fold}] pred2 {test_loader.dataset.transforms}')
+            prediction2 = trainer.predict(test_loader, progress_bar=opt.progress_bar)
+
+            prediction_fold = prediction0
+            prediction_tta = (prediction0 + prediction1 + prediction2) / 3
         else:
             prediction_fold = trainer.predict(test_loader, progress_bar=opt.progress_bar)
-            outoffold = trainer.predict(valid_loader, progress_bar=opt.progress_bar)
+        outoffold = trainer.predict(valid_loader, progress_bar=opt.progress_bar)
 
         predictions = prediction_fold
         outoffolds = outoffold
@@ -226,7 +228,8 @@ if __name__ == "__main__":
 
     if opt.tta:
         np.save(export_dir/'outoffolds_tta', outoffolds)
-        np.save(export_dir/'predictions_tta', predictions)
+        np.save(export_dir/'predictions', predictions)
+        np.save(export_dir/'predictions_tta', prediction_tta)
     else:
         np.save(export_dir/'outoffolds', outoffolds)
         np.save(export_dir/'predictions', predictions)

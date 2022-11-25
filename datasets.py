@@ -37,6 +37,7 @@ class G2Net2022Dataset(D.Dataset):
         spec_diff=False,
         random_crop=False, # do Not use
         resize_factor=1,
+        resize_method='mean',
         is_test=False,
         transforms=None,
         ):
@@ -47,7 +48,13 @@ class G2Net2022Dataset(D.Dataset):
         self.fillna = fillna
         self.diff = spec_diff
         self.random_crop = random_crop
-        self.resize_f = resize_factor 
+        self.resize_f = resize_factor
+        if resize_method == 'mean':
+            self.resize_func = np.mean
+        elif resize_method == 'max':
+            self.resize_func = np.max
+        else:
+            raise ValueError(f'{resize_method}')
         self.transforms = transforms
         self.is_test = is_test
 
@@ -106,18 +113,24 @@ class G2Net2022Dataset(D.Dataset):
     
         if self.resize_f != 1:
             if self.match:
-                spec_h1 = spec_h1.reshape(360, 5760//self.resize_f, self.resize_f).mean(2)
-                spec_l1 = spec_l1.reshape(360, 5760//self.resize_f, self.resize_f).mean(2)
+                spec_h1 = self.resize_func(
+                    spec_h1.reshape(360, 5760//self.resize_f, self.resize_f), axis=2)
+                spec_l1 = self.resize_func(
+                    spec_l1.reshape(360, 5760//self.resize_f, self.resize_f), axis=2)
             else:
                 if (not self.is_test) and self.random_crop:
                     slice_start = np.random.randint(0, spec_h1.shape[1] - 4096)
-                    spec_h1 = spec_h1[:, slice_start:slice_start+4096].reshape(360, 4096//self.resize_f, self.resize_f).mean(2)
-                    spec_l1 = spec_l1[:, slice_start:slice_start+4096].reshape(360, 4096//self.resize_f, self.resize_f).mean(2)
+                    spec_h1 = self.resize_func(
+                        spec_h1[:, slice_start:slice_start+4096].reshape(360, 4096//self.resize_f, self.resize_f), axis=2)
+                    spec_l1 = self.resize_func(
+                        spec_l1[:, slice_start:slice_start+4096].reshape(360, 4096//self.resize_f, self.resize_f), axis=2)
                 else:
                     img_size = spec_h1.shape[1]
                     img_size2 = int((img_size // self.resize_f) * self.resize_f)
-                    spec_h1 = spec_h1[:, :img_size2].reshape(360, img_size2//self.resize_f, self.resize_f).mean(2)
-                    spec_l1 = spec_l1[:, :img_size2].reshape(360, img_size2//self.resize_f, self.resize_f).mean(2)
+                    spec_h1 = self.resize_func(
+                        spec_h1[:, :img_size2].reshape(360, img_size2//self.resize_f, self.resize_f), axis=2)
+                    spec_l1 = self.resize_func(
+                        spec_l1[:, :img_size2].reshape(360, img_size2//self.resize_f, self.resize_f), axis=2)
                 
         if self.diff:
             img = np.stack((spec_h1, spec_l1, spec_h1 - spec_l1), axis=2) # (360, t, 3)
@@ -143,6 +156,7 @@ class G2Net2022Dataset2(D.Dataset):
         spec_diff=False,
         random_crop=False, # do Not use
         resize_factor=1,
+        resize_method='mean',
         is_test=False,
         transforms=None,
         ):
@@ -152,7 +166,13 @@ class G2Net2022Dataset2(D.Dataset):
         self.fillna = fillna
         self.diff = spec_diff
         self.random_crop = random_crop
-        self.resize_f = resize_factor 
+        self.resize_f = resize_factor
+        if resize_method == 'mean':
+            self.resize_func = np.mean
+        elif resize_method == 'max':
+            self.resize_func = np.max
+        else:
+            raise ValueError(f'{resize_method}')
         self.transforms = transforms
         self.is_test = is_test
 
@@ -211,18 +231,24 @@ class G2Net2022Dataset2(D.Dataset):
     
         if self.resize_f != 1:
             if self.match:
-                spec_h1 = spec_h1.reshape(360, 5760//self.resize_f, self.resize_f).mean(2)
-                spec_l1 = spec_l1.reshape(360, 5760//self.resize_f, self.resize_f).mean(2)
+                spec_h1 = self.resize_func(
+                    spec_h1.reshape(360, 5760//self.resize_f, self.resize_f), axis=2)
+                spec_l1 = self.resize_func(
+                    spec_l1.reshape(360, 5760//self.resize_f, self.resize_f), axis=2)
             else:
                 if (not self.is_test) and self.random_crop:
                     slice_start = np.random.randint(0, spec_h1.shape[1] - 4096)
-                    spec_h1 = spec_h1[:, slice_start:slice_start+4096].reshape(360, 4096//self.resize_f, self.resize_f).mean(2)
-                    spec_l1 = spec_l1[:, slice_start:slice_start+4096].reshape(360, 4096//self.resize_f, self.resize_f).mean(2)
+                    spec_h1 = self.resize_func(
+                        spec_h1[:, slice_start:slice_start+4096].reshape(360, 4096//self.resize_f, self.resize_f), axis=2)
+                    spec_l1 = self.resize_func(
+                        spec_l1[:, slice_start:slice_start+4096].reshape(360, 4096//self.resize_f, self.resize_f), axis=2)
                 else:
                     img_size = spec_h1.shape[1]
                     img_size2 = int((img_size // self.resize_f) * self.resize_f)
-                    spec_h1 = spec_h1[:, :img_size2].reshape(360, img_size2//self.resize_f, self.resize_f).mean(2)
-                    spec_l1 = spec_l1[:, :img_size2].reshape(360, img_size2//self.resize_f, self.resize_f).mean(2)
+                    spec_h1 = self.resize_func(
+                        spec_h1[:, :img_size2].reshape(360, img_size2//self.resize_f, self.resize_f), axis=2)
+                    spec_l1 = self.resize_func(
+                        spec_l1[:, :img_size2].reshape(360, img_size2//self.resize_f, self.resize_f), axis=2)
                 
         if self.diff:
             img = np.stack((spec_h1, spec_l1, spec_h1 - spec_l1), axis=2) # (360, t, 3)
