@@ -21,7 +21,7 @@ EXPORT_DIR.mkdir(exist_ok=True)
 
 
 def make_signal(idx, test_timestamps):
-    signal_depth = np.random.uniform(5, 60)
+    signal_depth = np.random.uniform(5, 50)
     signal_center = np.random.uniform(50, 500)
     timestamps_set = random.choice(test_timestamps)
     timestamps_h1, timestamps_l1 = timestamps_set['H1'], timestamps_set['L1']
@@ -198,6 +198,8 @@ if __name__ == '__main__':
             ts_with_gaps.append({'H1': time_h1, 'L1': time_l1})
         if i % 100 == 0:
             print(f'{i} done.')
+    with open('input/g2net-detecting-continuous-gravitational-waves/test_gaps.pickle', 'wb') as f:
+        pickle.dump(ts_with_gaps, f)
     # generate samples
     with Pool(NUM_WORKERS) as p:
         metadata_pos = p.map(
