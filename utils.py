@@ -21,7 +21,7 @@ def print_config(cfg, logger=None):
         'criterion', 'eval_metric', 'monitor_metrics',
         'amp', 'parallel', 'hook', 'callbacks', 'deterministic', 
         'clip_grad', 'max_grad_norm',
-        'pseudo_labels'
+        'pseudo_labels', 'train_path', 'test_path',
     ]
     _print('===== CONFIG =====')
     for key in items:

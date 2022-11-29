@@ -21,7 +21,7 @@ class MixupTrain(SimpleHook):
         idx = torch.randperm(bs).to(target.device)
         approx, lam = trainer.model(*inputs[:-1], lam=lam, idx=idx)
         if self.lor_label:
-            target = target + target[idx] - target * target[idx]
+            target = target + (1 - target) * target[idx]
         else:
             target = target * lam[:, None] + target[idx] * (1-lam)[:, None]
             if self.hard_label:

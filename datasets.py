@@ -84,6 +84,16 @@ class G2Net2022Dataset(D.Dataset):
             spec_l1 = spec_l1.real**2 + spec_l1.imag**2
             spec_h1 /= 13.
             spec_l1 /= 13.
+        elif self.norm == 'local_median':
+            spec_h1 = spec_h1.real**2 + spec_h1.imag**2
+            spec_l1 = spec_l1.real**2 + spec_l1.imag**2
+            spec_h1 /= np.median(spec_h1)
+            spec_l1 /= np.median(spec_l1)
+        elif self.norm == 'local_25%':
+            spec_h1 = spec_h1.real**2 + spec_h1.imag**2
+            spec_l1 = spec_l1.real**2 + spec_l1.imag**2
+            spec_h1 /= np.percentile(spec_h1, 25)
+            spec_l1 /= np.percentile(spec_l1, 25)
         elif self.norm == 'laeyoung':
             spec_h1 = laeyoung_normalize(spec_h1)
             spec_l1 = laeyoung_normalize(spec_l1)
@@ -132,13 +142,16 @@ class G2Net2022Dataset(D.Dataset):
                     spec_l1 = self.resize_func(
                         spec_l1[:, :img_size2].reshape(360, img_size2//self.resize_f, self.resize_f), axis=2)
                 
-        if self.diff:
-            img = np.stack((spec_h1, spec_l1, spec_h1 - spec_l1), axis=2) # (360, t, 3)
-        else:
-            img = np.stack((spec_h1, spec_l1), axis=2) # (360, t, 2)
+        img = np.stack((spec_h1, spec_l1), axis=2) # (360, t, 2)
         
         if self.transforms:
             img = self.transforms(image=img)['image']
+
+        if self.diff:
+            if isinstance(img, torch.Tensor):
+                img = torch.concat([img, (img[0] - img[1])[None, :, :]], axis=0) # (3, f, t)
+            else:
+                img = np.concatenate([img, (img[0] - img[1])[None, :, :]], axis=0) # (3, f, t)
         
         return img, target
 
@@ -202,6 +215,16 @@ class G2Net2022Dataset2(D.Dataset):
             spec_l1 = spec_l1.real**2 + spec_l1.imag**2
             spec_h1 /= 13.
             spec_l1 /= 13.
+        elif self.norm == 'local_median':
+            spec_h1 = spec_h1.real**2 + spec_h1.imag**2
+            spec_l1 = spec_l1.real**2 + spec_l1.imag**2
+            spec_h1 /= np.median(spec_h1)
+            spec_l1 /= np.median(spec_l1)
+        elif self.norm == 'local_25%':
+            spec_h1 = spec_h1.real**2 + spec_h1.imag**2
+            spec_l1 = spec_l1.real**2 + spec_l1.imag**2
+            spec_h1 /= np.percentile(spec_h1, 25)
+            spec_l1 /= np.percentile(spec_l1, 25)
         elif self.norm == 'laeyoung':
             spec_h1 = laeyoung_normalize(spec_h1)
             spec_l1 = laeyoung_normalize(spec_l1)
@@ -249,13 +272,15 @@ class G2Net2022Dataset2(D.Dataset):
                         spec_h1[:, :img_size2].reshape(360, img_size2//self.resize_f, self.resize_f), axis=2)
                     spec_l1 = self.resize_func(
                         spec_l1[:, :img_size2].reshape(360, img_size2//self.resize_f, self.resize_f), axis=2)
-                
-        if self.diff:
-            img = np.stack((spec_h1, spec_l1, spec_h1 - spec_l1), axis=2) # (360, t, 3)
-        else:
-            img = np.stack((spec_h1, spec_l1), axis=2) # (360, t, 2)
+        
+        img = np.stack((spec_h1, spec_l1), axis=2) # (360, t, 2)
         
         if self.transforms:
             img = self.transforms(image=img)['image']
+
+        if self.diff:
+            img = torch.concat([img, (img[0] - img[1])[None, :, :]], axis=0) # (3, f, t)
+        else:
+                img = np.concatenate([img, (img[0] - img[1])[None, :, :]], axis=0) # (3, f, t)
         
         return img, target

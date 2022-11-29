@@ -14,12 +14,12 @@ catboost_info/
 input/
 checkpoints/
 wavelets_pytorch/
-results/
+results*/
 requirements/
 kaggle/
 logs/
 input/*
-pyfstat/
+pyfstat*/
 run.sh
 .ku_ddp_tmp*
 eda.ipynb
