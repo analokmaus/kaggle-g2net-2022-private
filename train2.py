@@ -166,9 +166,15 @@ if __name__ == "__main__":
     outoffolds = np.full((len(valid), 1), 0.5, dtype=np.float32)
     test_data = cfg.dataset(
         df=test, data_dir=cfg.test_dir,
-        transforms=cfg.transforms['test'], is_test=True, **cfg.dataset_params)
+        transforms=cfg.transforms['tta'], is_test=True, **cfg.dataset_params)
     test_loader = D.DataLoader(
         test_data, batch_size=cfg.batch_size, shuffle=False, 
+        num_workers=opt.num_workers, pin_memory=False)
+    valid_data = cfg.dataset(
+        df=valid, data_dir = valid_dir,
+        transforms=cfg.transforms['tta'], is_test=True, **cfg.dataset_params)
+    valid_loader = D.DataLoader(
+        valid_data, batch_size=cfg.batch_size, shuffle=False,
         num_workers=opt.num_workers, pin_memory=False)
     fold = 0
 
@@ -197,7 +203,7 @@ if __name__ == "__main__":
             prediction0 = trainer.predict(test_loader, progress_bar=opt.progress_bar)
 
             tta_transforms = A.Compose(
-                [A.HorizontalFlip(p=1)] + cfg.transforms['test'].transforms
+                [A.HorizontalFlip(p=1)] + cfg.transforms['tta'].transforms
             )
             test_loader = make_tta_dataloader(test_loader, cfg.dataset, dict(
                 df=test, data_dir=cfg.test_dir,
@@ -206,7 +212,7 @@ if __name__ == "__main__":
             prediction1 = trainer.predict(test_loader, progress_bar=opt.progress_bar)
 
             tta_transforms = A.Compose(
-                [A.VerticalFlip(p=1)] + cfg.transforms['test'].transforms
+                [A.VerticalFlip(p=1)] + cfg.transforms['tta'].transforms
             )
             test_loader = make_tta_dataloader(test_loader, cfg.dataset, dict(
                 df=test, data_dir=cfg.test_dir,

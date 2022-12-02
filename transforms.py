@@ -5,6 +5,111 @@ from torchaudio.transforms import FrequencyMasking, TimeMasking
 from albumentations.core.transforms_interface import ImageOnlyTransform, DualTransform
 import math
 import matplotlib.pyplot as plt
+import random
+import pickle
+
+
+def adaptive_resize(img, resize_f, resize_func):
+    f, t, ch = img.shape
+    t2 = int((t // resize_f) * resize_f)
+    img = resize_func(
+        img[:, :t2, :].reshape(f, t2//resize_f, resize_f, ch), axis=2)
+    return img
+
+
+class ToSpectrogram(ImageOnlyTransform):
+    def __init__(self, always_apply=True, p=1.0):
+        super().__init__(always_apply, p)
+
+    def apply(self, img: np.ndarray, **params): # img: (freq, t, ch)
+        return img.real ** 2 + img.imag ** 2
+
+    def get_transform_init_args_names(self):
+        return ()
+
+
+class NormalizeSpectrogram(ImageOnlyTransform):
+    def __init__(self, method='mean', always_apply=True, p=1.0):
+        super().__init__(always_apply, p)
+        assert method in ['mean', 'constant', 'median', 'concat']
+        self.method = method
+
+    def apply(self, img: np.ndarray, **params): # img: (freq, t, ch)
+        if self.method == 'mean':
+            for ch in range(img.shape[2]):
+                img[:, :, ch] /= img[:, :, ch].mean() 
+        elif self.method == 'constant':
+            img /= 13.
+        elif self.method == 'median':
+            for ch in range(img.shape[2]):
+                img[:, :, ch] /= np.median(img[:, :, ch])
+        elif self.method == 'concat':
+            img2 = np.empty((img.shape[0], img.shape[1], 4), dtype=np.float32)
+            for ch in range(img.shape[2]):
+                img2[:, :, 2*ch] = img[:, :, ch] / img[:, :, ch].mean() 
+                img2[:, :, 2*ch+1] = img[:, :, ch] / 13.
+            img = img2
+        return img
+
+    def get_transform_init_args_names(self):
+        return {'method': self.method}
+    
+
+class AdaptiveResize(ImageOnlyTransform):
+    def __init__(self, resize_factor=16, method='mean', always_apply=True, p=1.0):
+        super().__init__(always_apply, p)
+        self.resize_f = resize_factor
+        assert method in ['mean', 'max']
+        self.method = method
+        if self.method == 'mean':
+            self.resize_func = np.mean
+        elif self.method == 'max':
+            self.resize_func = np.max
+
+    def apply(self, img: np.ndarray, **params): # img: (freq, t, ch)
+        return adaptive_resize(img, self.resize_f, self.resize_func)
+
+    def get_transform_init_args_names(self):
+        return {'resize_f': self.resize_f, 'method': self.method}
+
+
+class RandomAmplify(ImageOnlyTransform):
+    def __init__(self, amp_range=(0.9, 1.1), always_apply=False, p=0.5):
+        super().__init__(always_apply, p)
+        self.amp_range = amp_range
+
+    def apply(self, img: np.ndarray, **params): # img: (freq, t, ch)
+        amp = np.random.uniform(*self.amp_range)
+        return img * amp
+
+    def get_transform_init_args_names(self):
+        return {'amp_range': self.amp_range}
+
+
+class AddChannel(ImageOnlyTransform):
+    def __init__(self, channel='diff', always_apply=True, p=1.0):
+        super().__init__(always_apply, p)
+        assert channel in ['diff']
+        self.channel = channel
+
+    def apply(self, img: np.ndarray, **params): # img: (freq, t, ch)
+        img = np.concatenate([img, (img[:, :, 0] -img[:, :, 1])[:, :, None]], axis=2)
+        return img
+
+    def get_transform_init_args_names(self):
+        return {'channel': self.channel}
+
+
+class DropChannel(ImageOnlyTransform):
+    def __init__(self, always_apply=False, p=0.5):
+        super().__init__(always_apply, p)
+        
+    def apply(self, img: np.ndarray, **params): # img: (freq, t, ch)
+        img[:, :, np.random.randint(0, 2)] = 0
+        return img
+
+    def get_transform_init_args_names(self):
+        return {}
 
 
 class FrequencyMaskingTensor(ImageOnlyTransform):
@@ -191,14 +296,15 @@ class DeltaNoise(ImageOnlyTransform):
 
 
 class BandNoise(ImageOnlyTransform):
-    def __init__(self, band_width=64, always_apply=False, p=0.5):
+    def __init__(self, band_width=64, strength=1.0, always_apply=False, p=0.5):
         super().__init__(always_apply, p)
         self.band_width = band_width
+        self.strength = strength
 
     def apply(self, img: np.ndarray, **params): # img: (freq, t, ch)
         band_width = np.random.randint(0, self.band_width)
         noise_center = np.random.randint(0, img.shape[1]- band_width, size=2)
-        strength = np.random.uniform(0, np.median(img))
+        strength = np.random.uniform(0, np.median(img) * self.strength)
         gaussian_noise = strength * (
             np.random.normal(0, 1, size=(360, band_width, 2)) ** 2)
         img[:, noise_center[0]:noise_center[0]+band_width, 0] += gaussian_noise[:, :, 0]
@@ -206,7 +312,7 @@ class BandNoise(ImageOnlyTransform):
         return img
 
     def get_transform_init_args_names(self):
-        return {'band_width': self.band_width}
+        return {'band_width': self.band_width, 'strength': self.strength}
 
 
 class ClipSignal(ImageOnlyTransform):
@@ -220,3 +326,81 @@ class ClipSignal(ImageOnlyTransform):
 
     def get_transform_init_args_names(self):
         return {'low': self.low, 'high': self.high}
+
+
+class InjectTimeNoise(ImageOnlyTransform):
+    def __init__(self, noise_file, resize_factor=16, strength=(0.75, 1.0), always_apply=False, p=0.5):
+        super().__init__(always_apply, p)
+        self.noise_file = noise_file
+        with open(noise_file, 'rb') as f:
+            self.noise_dict = pickle.load(f)
+        self.resize_f = resize_factor
+        self.strength = strength
+    
+    def apply(self, img: np.ndarray, **params): # img: (freq, t, ch)
+        tnoise_h1 = random.choice(self.noise_dict['H1']) # (t1,)
+        tnoise_l1 = random.choice(self.noise_dict['L1']) # (t2,)
+        tnoise_h1 = adaptive_resize(
+            np.repeat(tnoise_h1[None, :], img.shape[0], axis=0)[:, :, None], self.resize_f, np.mean)[:, :, 0]
+        tnoise_l1 = adaptive_resize(
+            np.repeat(tnoise_l1[None, :], img.shape[0], axis=0)[:, :, None], self.resize_f, np.mean)[:, :, 0]
+        noise_std = np.random.uniform(img.std()*0.9, img.std()*1.1)
+        noise_scale = np.random.uniform(self.strength[0], self.strength[1])
+        tnoise_h1 += np.random.normal(0, noise_std, size=[*tnoise_h1.shape])
+        tnoise_h1 -= img[:, :, 0].mean()
+        tnoise_l1 += np.random.normal(0, noise_std, size=[*tnoise_l1.shape])
+        tnoise_l1 -= img[:, :, 1].mean()
+        slice_h1 = np.random.randint(0, tnoise_h1.shape[1]-img.shape[1])
+        slice_l1 = np.random.randint(0, tnoise_l1.shape[1]-img.shape[1])
+        img[:, :, 0] += (tnoise_h1[:, slice_h1:slice_h1+img.shape[1]] * noise_scale)
+        img[:, :, 1] += (tnoise_l1[:, slice_l1:slice_l1+img.shape[1]] * noise_scale)
+        return img.clip(0, None)
+
+    def get_transform_init_args_names(self):
+        return {'noise_file': self.noise_file, 'resize_f': self.resize_f, 'strength': self.strength}
+
+
+class InjectAnomaly(ImageOnlyTransform):
+    def __init__(self, anomaly_file, detector='H1', always_apply=False, p=0.5):
+        super().__init__(always_apply, p)
+        self.anomaly_file = anomaly_file
+        with open(anomaly_file, 'rb') as f:
+            self.anomaly_dict = pickle.load(f)
+        self.detector = detector
+    
+    def apply(self, img: np.ndarray, **params): # img: (freq, t, ch)
+        anomaly, ref_amp = random.choice(self.anomaly_dict[self.detector]) 
+        if ref_amp <= 10:
+            amp = np.random.uniform(1.5, 10)
+        elif 10 < ref_amp <= 100:
+            amp = np.random.uniform(10, 100)
+        elif ref_amp > 100:
+            amp = np.random.uniform(100, 1000)
+        anomaly *= amp
+        flip_aug_seed = np.random.random()
+        if 0.25 < flip_aug_seed <= 0.5:
+            anomaly = anomaly[:, ::-1]
+        elif 0.5 < flip_aug_seed <= 0.75:
+            anomaly = anomaly[::-1, :]
+        elif 0.75 < flip_aug_seed:
+            anomaly = anomaly[::-1, ::-1]
+        if img.shape[0] > anomaly.shape[0]:
+            slice_f = np.random.randint(0, img.shape[0]-anomaly.shape[0])
+        else:
+            slice_f = 0
+        if img.shape[1] > anomaly.shape[1]:
+            slice_t = np.random.randint(0, img.shape[1]-anomaly.shape[1])
+        elif anomaly.shape[1] > img.shape[1]:
+            slice_t = 0
+            anomaly_slice = np.random.randint(0, anomaly.shape[1]-img.shape[1])
+            anomaly = anomaly[:, anomaly_slice:anomaly_slice+img.shape[1]]
+        else:
+            slice_t = 0
+        if self.detector == 'H1':
+            img[slice_f:slice_f+anomaly.shape[0], slice_t:slice_t+anomaly.shape[1], 0] += anomaly
+        elif self.detector == 'L1':
+            img[slice_f:slice_f+anomaly.shape[0], slice_t:slice_t+anomaly.shape[1], 1] += anomaly
+        return img
+
+    def get_transform_init_args_names(self):
+        return {'anomaly_file': self.anomaly_file, 'detector': self.detector}

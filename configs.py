@@ -12,7 +12,7 @@ from kuma_utils.torch.callbacks import (
     EarlyStopping, SaveSnapshot, SaveEveryEpoch, SaveAllSnapshots)
 from kuma_utils.torch.hooks import TrainHook
 
-from datasets import G2Net2022Dataset, G2Net2022Dataset2
+from datasets import *
 from architectures import *
 from replknet import *
 from models1d_pytorch import *
@@ -86,7 +86,7 @@ class Baseline:
 
 
 class Baseline2(Baseline):
-    name = 'aug_15'
+    name = 'baseline_2'
     model_params = dict(
         model_name='tf_efficientnet_b6_ns',
         pretrained=True,
@@ -122,7 +122,46 @@ class Baseline2(Baseline):
     train_dir = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/v8/'
 
 
-class Prep00(Baseline2):
+class Baseline3(Baseline): # replicate 733
+    name = 'baseline_3'
+    model_params = dict(
+        model_name='tf_efficientnet_b6_ns',
+        pretrained=True,
+        num_classes=1,
+        # timm_params=dict(in_chans=2)
+    )
+    batch_size = 32
+    dataset = G2Net2022Dataset3
+    dataset_params = dict(
+        preprocess=A.Compose([
+            ToSpectrogram(), AdaptiveResize(16), NormalizeSpectrogram('mean'), AddChannel('diff')]),
+        match_time=False)
+    transforms = dict(
+        train=A.Compose([
+            A.HorizontalFlip(p=0.5),
+            A.VerticalFlip(p=0.5),
+            ShiftImage(x_max=128, y_max=180, p=0.5),
+            MixupChannel(num_segments=20, fix_area=True, p=0.5),
+            RandomCrop(256),
+            ToTensorV2(),
+            FrequencyMaskingTensor(18, p=0.5),
+            FrequencyMaskingTensor(18, p=0.5),
+            FrequencyMaskingTensor(18, p=0.2),
+            TimeMaskingTensor(32, p=0.5),
+            TimeMaskingTensor(32, p=0.5),
+            TimeMaskingTensor(32, p=0.2)]),
+        test=A.Compose([
+            CropImage(256),
+            ToTensorV2()]),
+        tta=A.Compose([
+            CropImage(256),
+            ToTensorV2()]),
+    )
+    train_path = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/v1.csv'
+    train_dir = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/v1/'
+
+
+class Prep00(Baseline2): # global
     name = 'prep_00'
     dataset_params = dict(
         normalize='global', 
@@ -131,31 +170,180 @@ class Prep00(Baseline2):
         match_time=False)
 
 
-class Aug00(Baseline2): # basic aug
-    name = 'aug_00'
-    transforms = dict(
-        train=A.Compose([
-            A.HorizontalFlip(p=0.5),
-            A.VerticalFlip(p=0.5),
-            ShiftImage(x_max=128, y_max=180, p=0.5),
-            # MixupChannel(num_segments=20, fix_area=True, p=0.5),
-            RandomCrop(256),
-            ToTensorV2(),
-            FrequencyMaskingTensor(12, p=0.5),
-            TimeMaskingTensor(24, p=0.5),
-            FrequencyMaskingTensor(12, p=0.5),
-            TimeMaskingTensor(24, p=0.5),
-            TimeMaskingTensor(24, p=0.2)]),
-        test=A.Compose([
-            CropImage(256),
-            ToTensorV2()]),
-        tta=A.Compose([
-            CropImage(256),
-            ToTensorV2()]),
+class Prep01(Baseline2): # global 4ch
+    name = 'prep_01'
+    dataset = G2Net2022Dataset3
+    dataset_params = dict(
+        preprocess=A.Compose([
+            ToSpectrogram(), AdaptiveResize(16), NormalizeSpectrogram('concat')
+        ]),
+        match_time=False)
+    model_params = dict(
+        model_name='tf_efficientnet_b6_ns',
+        pretrained=True,
+        num_classes=1,
+        timm_params=dict(in_chans=4)
+    )
+    train_path = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/v7.csv'
+    train_dir = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/v7/'
+    
+
+class Prep02(Baseline2): # global 2ch
+    name = 'prep_02'
+    dataset = G2Net2022Dataset3
+    dataset_params = dict(
+        preprocess=A.Compose([
+            ToSpectrogram(), AdaptiveResize(16), NormalizeSpectrogram('constant')
+        ]),
+        match_time=False)
+    model_params = dict(
+        model_name='tf_efficientnet_b6_ns',
+        pretrained=True,
+        num_classes=1,
+        timm_params=dict(in_chans=2)
+    )
+    train_path = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/v7.csv'
+    train_dir = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/v7/'
+
+
+class Prep02ds0(Prep02):
+    name = 'prep_02_ds0'
+    train_path = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/v9.csv'
+    train_dir = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/v9/'
+
+
+class Prep03(Baseline3): # mean 2ch
+    name = 'prep_03'
+    dataset_params = dict(
+        preprocess=A.Compose([
+            ToSpectrogram(), AdaptiveResize(16), NormalizeSpectrogram('mean')
+        ]),
+        match_time=False)
+    model_params = dict(
+        model_name='tf_efficientnet_b6_ns',
+        pretrained=True,
+        num_classes=1,
+        timm_params=dict(in_chans=2)
+    )
+    train_path = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/v10.csv'
+    train_dir = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/v10/'
+
+
+class Ds00(Baseline2): # v7
+    name = 'ds_00'
+    train_path = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/v7.csv'
+    train_dir = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/v7/'
+
+
+class Ds01(Baseline3): # v9
+    name = 'ds_01'
+    train_path = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/v9.csv'
+    train_dir = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/v9/'
+
+
+class Ds01prep0(Ds01): # v9 global
+    name = 'ds_01_prep0'
+    dataset_params = dict(
+        preprocess=A.Compose([
+            ToSpectrogram(), AdaptiveResize(16), 
+            NormalizeSpectrogram('constant'), AddChannel('diff')
+        ]),
+        match_time=False)
+
+
+class Ds02(Baseline3): # v10
+    name = 'ds_02'
+    train_path = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/v10.csv'
+    train_dir = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/v10/'
+    callbacks = [
+        EarlyStopping(patience=10, maximize=True, skip_epoch=4),
+        SaveSnapshot()
+    ]
+
+
+class Ds02prep0(Ds02): # v10 global
+    name = 'ds_02_prep0'
+    dataset_params = dict(
+        preprocess=A.Compose([
+            ToSpectrogram(), AdaptiveResize(16), 
+            NormalizeSpectrogram('constant'), AddChannel('diff')
+        ]),
+        match_time=False)
+
+
+class Ds03(Baseline3): # v11
+    name = 'ds_03'
+    train_path = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/v11.csv'
+    train_dir = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/v11/'
+    callbacks = [
+        EarlyStopping(patience=10, maximize=True, skip_epoch=4),
+        SaveSnapshot()
+    ]
+
+
+class Ds03prep0(Ds03): # v11 global
+    name = 'ds_03_prep0'
+    dataset_params = dict(
+        preprocess=A.Compose([
+            ToSpectrogram(), AdaptiveResize(16), 
+            NormalizeSpectrogram('constant'), AddChannel('diff')
+        ]),
+        match_time=False)
+
+
+class Ds04(Baseline3): # v12
+    name = 'ds_04'
+    train_path = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/v12.csv'
+    train_dir = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/v12/'
+    callbacks = [
+        EarlyStopping(patience=10, maximize=True, skip_epoch=4),
+        SaveSnapshot()
+    ]
+
+
+class Ds04prep0(Ds04): # v12 global
+    name = 'ds_04_prep0'
+    dataset_params = dict(
+        preprocess=A.Compose([
+            ToSpectrogram(), AdaptiveResize(16), 
+            NormalizeSpectrogram('constant'), AddChannel('diff')
+        ]),
+        match_time=False)
+
+
+class Ds04prep1(Ds04): # v12 global 2ch
+    name = 'ds_04_prep1'
+    dataset_params = dict(
+        preprocess=A.Compose([
+            ToSpectrogram(), AdaptiveResize(16), 
+            NormalizeSpectrogram('constant')
+        ]),
+        match_time=False)
+    model_params = dict(
+        model_name='tf_efficientnet_b6_ns',
+        pretrained=True,
+        num_classes=1,
+        timm_params=dict(in_chans=2)
     )
 
 
-class Aug01(Baseline2): # band noise
+class Ds04prep2(Ds04): # v12 global 4ch
+    name = 'ds_04_prep2'
+    dataset_params = dict(
+        preprocess=A.Compose([
+            ToSpectrogram(), AdaptiveResize(16), 
+            NormalizeSpectrogram('concat')
+        ]),
+        match_time=False)
+    model_params = dict(
+        model_name='tf_efficientnet_b6_ns',
+        pretrained=True,
+        num_classes=1,
+        timm_params=dict(in_chans=4)
+    )
+
+
+class Aug01(Ds04prep1): # test noise type1
     name = 'aug_01'
     transforms = dict(
         train=A.Compose([
@@ -163,14 +351,15 @@ class Aug01(Baseline2): # band noise
             A.VerticalFlip(p=0.5),
             ShiftImage(x_max=128, y_max=180, p=0.5),
             MixupChannel(num_segments=20, fix_area=True, p=0.5),
-            BandNoise(band_width=64, p=0.25), BandNoise(band_width=64, p=0.25), BandNoise(band_width=64, p=0.25),
             RandomCrop(256),
+            InjectTimeNoise('input/timenoise_v0.pickle', resize_factor=16, p=0.25),
             ToTensorV2(),
-            FrequencyMaskingTensor(12, p=0.5),
-            TimeMaskingTensor(24, p=0.5),
-            FrequencyMaskingTensor(12, p=0.5),
-            TimeMaskingTensor(24, p=0.5),
-            TimeMaskingTensor(24, p=0.2)]),
+            FrequencyMaskingTensor(18, p=0.5),
+            FrequencyMaskingTensor(18, p=0.5),
+            FrequencyMaskingTensor(18, p=0.2),
+            TimeMaskingTensor(32, p=0.5),
+            TimeMaskingTensor(32, p=0.5),
+            TimeMaskingTensor(32, p=0.2)]),
         test=A.Compose([
             CropImage(256),
             ToTensorV2()]),
@@ -180,7 +369,42 @@ class Aug01(Baseline2): # band noise
     )
 
 
-class Aug02(Baseline2): # delta noise
+class Aug01ds0(Aug01):
+    name = 'aug_01_ds0'
+    train_path = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/v10.csv'
+    train_dir = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/v10/'
+
+
+class Aug01prep0(Aug01):
+    name = 'aug_01_prep0'
+    transforms = dict(
+        train=A.Compose([
+            A.HorizontalFlip(p=0.5),
+            A.VerticalFlip(p=0.5),
+            ShiftImage(x_max=128, y_max=180, p=0.5),
+            MixupChannel(num_segments=20, fix_area=True, p=0.5),
+            RandomCrop(256),
+            InjectTimeNoise('input/timenoise_v0.pickle', resize_factor=16, p=0.25),
+            ClipSignal(0, 1.0),
+            ToTensorV2(),
+            FrequencyMaskingTensor(18, p=0.5),
+            FrequencyMaskingTensor(18, p=0.5),
+            FrequencyMaskingTensor(18, p=0.2),
+            TimeMaskingTensor(32, p=0.5),
+            TimeMaskingTensor(32, p=0.5),
+            TimeMaskingTensor(32, p=0.2)]),
+        test=A.Compose([
+            CropImage(256),
+            ClipSignal(0, 1.0),
+            ToTensorV2()]),
+        tta=A.Compose([
+            CropImage(256),
+            ClipSignal(0, 1.0),
+            ToTensorV2()]),
+    )
+
+
+class Aug02(Ds04prep1): # time noise / anomaly
     name = 'aug_02'
     transforms = dict(
         train=A.Compose([
@@ -188,138 +412,155 @@ class Aug02(Baseline2): # delta noise
             A.VerticalFlip(p=0.5),
             ShiftImage(x_max=128, y_max=180, p=0.5),
             MixupChannel(num_segments=20, fix_area=True, p=0.5),
-            BandNoise(band_width=64, p=0.25), BandNoise(band_width=64, p=0.25), BandNoise(band_width=64, p=0.25),
-            DeltaNoise(strength=(5, 50), p=0.25),
             RandomCrop(256),
+            InjectTimeNoise('input/timenoise_v1.pickle', strength=(0.9, 1.5), resize_factor=16, p=0.25),
+            InjectAnomaly('input/anomaly_v0_16.pickle', 'H1', p=0.05),
+            InjectAnomaly('input/anomaly_v0_16.pickle', 'L1', p=0.05),
+            ClipSignal(0, 3.0),
             ToTensorV2(),
-            FrequencyMaskingTensor(12, p=0.5),
-            TimeMaskingTensor(24, p=0.5),
-            FrequencyMaskingTensor(12, p=0.5),
-            TimeMaskingTensor(24, p=0.5),
-            TimeMaskingTensor(24, p=0.2)]),
+            FrequencyMaskingTensor(18, p=0.5),
+            FrequencyMaskingTensor(18, p=0.5),
+            FrequencyMaskingTensor(18, p=0.2),
+            TimeMaskingTensor(32, p=0.5),
+            TimeMaskingTensor(32, p=0.5),
+            TimeMaskingTensor(32, p=0.2)]),
         test=A.Compose([
             CropImage(256),
+            ClipSignal(0, 3.0),
             ToTensorV2()]),
         tta=A.Compose([
             CropImage(256),
+            ClipSignal(0, 3.0),
             ToTensorV2()]),
     )
 
 
-class Aug02(Baseline2): # delta noise
-    name = 'aug_02'
-    transforms = dict(
-        train=A.Compose([
-            A.HorizontalFlip(p=0.5),
-            A.VerticalFlip(p=0.5),
-            ShiftImage(x_max=128, y_max=180, p=0.5),
-            MixupChannel(num_segments=20, fix_area=True, p=0.5),
-            BandNoise(band_width=64, p=0.25), BandNoise(band_width=64, p=0.25), BandNoise(band_width=64, p=0.25),
-            DeltaNoise(strength=(5, 50), p=0.25),
-            RandomCrop(256),
-            ToTensorV2(),
-            FrequencyMaskingTensor(12, p=0.5),
-            TimeMaskingTensor(24, p=0.5),
-            FrequencyMaskingTensor(12, p=0.5),
-            TimeMaskingTensor(24, p=0.5),
-            TimeMaskingTensor(24, p=0.2)]),
-        test=A.Compose([
-            CropImage(256),
-            ToTensorV2()]),
-        tta=A.Compose([
-            CropImage(256),
-            ToTensorV2()]),
-    )
-
-
-class Aug02prep0(Aug02):
-    name = 'aug_02_prep0'
-    transforms = dict(
-        train=A.Compose([
-            A.HorizontalFlip(p=0.5),
-            A.VerticalFlip(p=0.5),
-            ShiftImage(x_max=128, y_max=180, p=0.5),
-            MixupChannel(num_segments=20, fix_area=True, p=0.5),
-            BandNoise(band_width=64, p=0.25), BandNoise(band_width=64, p=0.25), BandNoise(band_width=64, p=0.25),
-            DeltaNoise(strength=(5, 50), p=0.25),
-            RandomCrop(256),
-            ClipSignal(0, 5),
-            ToTensorV2(),
-            FrequencyMaskingTensor(12, p=0.5),
-            TimeMaskingTensor(24, p=0.5),
-            FrequencyMaskingTensor(12, p=0.5),
-            TimeMaskingTensor(24, p=0.5),
-            TimeMaskingTensor(24, p=0.2)]),
-        test=A.Compose([
-            CropImage(256),
-            ClipSignal(0, 5),
-            ToTensorV2()]),
-        tta=A.Compose([
-            CropImage(256),
-            ClipSignal(0, 5),
-            ToTensorV2()]),
-    )
-
-
-class Aug03(Baseline2): # delta noise + global
+class Aug03(Ds04prep1):
     name = 'aug_03'
+    transforms = dict(
+        train=A.Compose([
+            A.HorizontalFlip(p=0.5),
+            A.VerticalFlip(p=0.5),
+            ShiftImage(x_max=0, y_max=180, p=0.5),
+            MixupChannel(num_segments=20, fix_area=True, p=0.5),
+            RandomCrop(256),
+            InjectTimeNoise('input/timenoise_v1.pickle', strength=(0.9, 1.5), resize_factor=16, p=0.5),
+            RandomAmplify(p=0.5),
+            ToTensorV2(),
+            FrequencyMaskingTensor(18, p=0.5),
+            FrequencyMaskingTensor(18, p=0.5),
+            FrequencyMaskingTensor(18, p=0.5),
+            TimeMaskingTensor(32, p=0.5),
+            TimeMaskingTensor(32, p=0.5),
+            TimeMaskingTensor(32, p=0.5)]),
+        test=A.Compose([
+            CropImage(256),
+            ToTensorV2()]),
+        tta=A.Compose([
+            CropImage(256),
+            ToTensorV2()]),
+    )
+
+
+class Aug04(Ds04prep1):
+    name = 'aug_04'
+    transforms = dict(
+        train=A.Compose([
+            A.HorizontalFlip(p=0.5),
+            A.VerticalFlip(p=0.5),
+            ShiftImage(x_max=0, y_max=180, p=0.5),
+            MixupChannel(num_segments=20, fix_area=True, p=0.5),
+            RandomCrop(256),
+            InjectTimeNoise('input/timenoise_v0.pickle', strength=(0.9, 1.5), resize_factor=16, p=0.5),
+            RandomAmplify(p=0.5),
+            DropChannel(p=0.25),
+            ToTensorV2(),
+            FrequencyMaskingTensor(18, p=0.5),
+            FrequencyMaskingTensor(18, p=0.5),
+            FrequencyMaskingTensor(18, p=0.2),
+            TimeMaskingTensor(32, p=0.5),
+            TimeMaskingTensor(32, p=0.5),
+            TimeMaskingTensor(32, p=0.2)]),
+        test=A.Compose([
+            CropImage(256),
+            ToTensorV2()]),
+        tta=A.Compose([
+            CropImage(256),
+            ToTensorV2()]),
+    )
+
+
+class Aug04prep0(Aug04):
+    name = 'aug_04_prep0'
+    # TODO
+
+
+class Aug05(Ds04prep1):
+    name = 'aug_05'
+    transforms = dict(
+        train=A.Compose([
+            A.HorizontalFlip(p=0.5),
+            A.VerticalFlip(p=0.5),
+            ShiftImage(x_max=0, y_max=180, p=0.5),
+            MixupChannel(num_segments=20, fix_area=True, p=0.5),
+            RandomCrop(256),
+            InjectTimeNoise('input/timenoise_v2.pickle', strength=(0.9, 1.5), resize_factor=16, p=0.4),
+            RandomAmplify(p=0.5),
+            DropChannel(p=0.25),
+            ToTensorV2(),
+            FrequencyMaskingTensor(18, p=0.5),
+            FrequencyMaskingTensor(18, p=0.5),
+            FrequencyMaskingTensor(18, p=0.2),
+            TimeMaskingTensor(32, p=0.5),
+            TimeMaskingTensor(32, p=0.5),
+            TimeMaskingTensor(32, p=0.2)]),
+        test=A.Compose([
+            CropImage(256),
+            InjectTimeNoise(
+                'input/timenoise_v2.pickle', strength=(0.75, 1.0), resize_factor=16, p=0.1),
+            ToTensorV2()]),
+        tta=A.Compose([
+            CropImage(256),
+            ToTensorV2()]),
+    )
+
+
+class Aug06(Ds04prep1): # local + aug 04
+    name = 'aug_06'
     dataset_params = dict(
-        normalize='global', 
-        resize_factor=16, 
-        spec_diff=True,
+        preprocess=A.Compose([
+            ToSpectrogram(), AdaptiveResize(16), 
+            NormalizeSpectrogram('mean')
+        ]),
         match_time=False)
     transforms = dict(
         train=A.Compose([
             A.HorizontalFlip(p=0.5),
             A.VerticalFlip(p=0.5),
-            ShiftImage(x_max=128, y_max=180, p=0.5),
+            ShiftImage(x_max=0, y_max=180, p=0.5),
             MixupChannel(num_segments=20, fix_area=True, p=0.5),
-            BandNoise(band_width=64, p=0.25), BandNoise(band_width=64, p=0.25), BandNoise(band_width=64, p=0.25),
-            DeltaNoise(strength=(1, 15), p=0.25),
             RandomCrop(256),
+            InjectTimeNoise('input/timenoise_v0.pickle', strength=(0.9, 1.5), resize_factor=16, p=0.5),
+            RandomAmplify(p=0.5),
+            NormalizeSpectrogram('mean'),
+            DropChannel(p=0.25),
             ToTensorV2(),
-            FrequencyMaskingTensor(12, p=0.5),
-            TimeMaskingTensor(24, p=0.5),
-            FrequencyMaskingTensor(12, p=0.5),
-            TimeMaskingTensor(24, p=0.5),
-            TimeMaskingTensor(24, p=0.2)]),
+            FrequencyMaskingTensor(18, p=0.5),
+            FrequencyMaskingTensor(18, p=0.5),
+            FrequencyMaskingTensor(18, p=0.2),
+            TimeMaskingTensor(32, p=0.5),
+            TimeMaskingTensor(32, p=0.5),
+            TimeMaskingTensor(32, p=0.2)]),
         test=A.Compose([
             CropImage(256),
+            NormalizeSpectrogram('mean'),
             ToTensorV2()]),
         tta=A.Compose([
             CropImage(256),
+            NormalizeSpectrogram('mean'),
             ToTensorV2()]),
     )
 
-
-class Aug03prep0(Aug03): # delta noise + global
-    name = 'aug_03_prep0'
-    transforms = dict(
-        train=A.Compose([
-            A.HorizontalFlip(p=0.5),
-            A.VerticalFlip(p=0.5),
-            ShiftImage(x_max=128, y_max=180, p=0.5),
-            MixupChannel(num_segments=20, fix_area=True, p=0.5),
-            BandNoise(band_width=64, p=0.25), BandNoise(band_width=64, p=0.25), BandNoise(band_width=64, p=0.25),
-            DeltaNoise(strength=(1, 15), p=0.25),
-            RandomCrop(256),
-            ClipSignal(0, 1),
-            ToTensorV2(),
-            FrequencyMaskingTensor(12, p=0.5),
-            TimeMaskingTensor(24, p=0.5),
-            FrequencyMaskingTensor(12, p=0.5),
-            TimeMaskingTensor(24, p=0.5),
-            TimeMaskingTensor(24, p=0.2)]),
-        test=A.Compose([
-            CropImage(256),
-            ClipSignal(0, 1),
-            ToTensorV2()]),
-        tta=A.Compose([
-            CropImage(256),
-            ClipSignal(0, 1),
-            ToTensorV2()]),
-    )
-    
 
 class Model00(Baseline2):
     name = 'model_00'
