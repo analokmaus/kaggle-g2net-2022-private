@@ -23,6 +23,47 @@ from utils import print_config, notify_me
 from training_extras import make_tta_dataloader
 
 
+def inference(data_loader, tta=False, drop_anomaly=False):
+    predictions = []
+    predictions_tta = []
+    drop_flag = []
+    for idx, (specs, _) in enumerate(data_loader):
+        specs = specs.cuda() # (n, ch, f, t)
+
+        if drop_anomaly:
+            for i in range(specs.shape[0]): 
+                if specs[i].max() > 2.0:
+                    specs[i, torch.argmax(torch.amax(specs[i], dim=(1,2)))] = 0 # drop single image with anomaly
+                    drop_flag.append(1)
+                else:
+                    drop_flag.append(0)
+        else:
+            drop_flag.append(0)
+
+        if tta:
+            specs_aug1 = torch.flip(specs, (2,))
+            specs_aug2 = torch.flip(specs, (3,))
+
+        with torch.no_grad():
+            pred0 = model(specs).cpu().numpy()
+            if tta:
+                pred1 = model(specs_aug1).cpu().numpy()
+                pred2 = model(specs_aug2).cpu().numpy()
+            
+        predictions.append(pred0)
+        if tta:
+            predictions_tta.append((pred0 + pred1 + pred2) / 3)
+        
+    torch.cuda.empty_cache()
+    predictions = np.concatenate(predictions, axis=0)
+    if tta:
+        predictions_tta = np.concatenate(predictions_tta, axis=0)
+    else:
+        predictions_tta = predictions
+    drop_flag = np.array(drop_flag)
+    return predictions, predictions_tta, drop_flag
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, default='Baseline',
@@ -34,6 +75,8 @@ if __name__ == "__main__":
                         help="inference")
     parser.add_argument("--tta", action='store_true', 
                         help="test time augmentation ")
+    parser.add_argument("--drop_anomaly", action='store_true', 
+                        help="drop anomaly")
     parser.add_argument("--debug", action='store_true')
     parser.add_argument("--silent", action='store_true')
     parser.add_argument("--progress_bar", action='store_true')
@@ -86,7 +129,7 @@ if __name__ == "__main__":
     if cfg.depth_bins is None:
         fold_iter = list(splitter.split(X=train, y=train['target']))
     else:
-        targets = pd.get_dummies(pd.cut(train['signal_depth'], [0, 20, 40, 60, 80, 100, 1000]))
+        targets = pd.get_dummies(pd.cut(train['signal_depth'], cfg.depth_bins))
         fold_iter = list(splitter.split(X=train, y=targets))
     with open(export_dir/'folds.pickle', 'wb') as f:
         pickle.dump(fold_iter, f)
@@ -194,18 +237,17 @@ if __name__ == "__main__":
     '''
     predictions = np.full((cfg.cv, len(test), 1), 0.5, dtype=np.float32)
     predictions_tta = np.full((cfg.cv, len(test), 1), 0.5, dtype=np.float32)
+    anomaly_flag = np.full((cfg.cv, len(test)), 0, dtype=np.uint8)
     outoffolds = np.full((len(train), 1), 0.5, dtype=np.float32)
     test_data = cfg.dataset(
         df=test, data_dir=cfg.test_dir,
         transforms=cfg.transforms['tta'], is_test=True, **cfg.dataset_params)
-
+    test_loader = D.DataLoader(
+            test_data, batch_size=cfg.batch_size, shuffle=False, 
+            num_workers=opt.num_workers, pin_memory=False)
+    
     for fold, (train_idx, valid_idx) in enumerate(fold_iter):
 
-        # if opt.limit_fold >= 0:
-        #     if fold == 0:
-        #         checkpoint = torch.load(export_dir/f'fold{opt.limit_fold}.pt', 'cpu')
-        #         scores.append(checkpoint['state']['best_score'])
-        #     continue
         if opt.limit_fold >= 0 and fold != opt.limit_fold:
             continue  # skip fold
 
@@ -222,66 +264,33 @@ if __name__ == "__main__":
         valid_loader = D.DataLoader(
             valid_data, batch_size=cfg.batch_size, shuffle=False,
             num_workers=opt.num_workers, pin_memory=False)
-        test_loader = D.DataLoader(
-            test_data, batch_size=cfg.batch_size, shuffle=False, 
-            num_workers=opt.num_workers, pin_memory=False)
 
         model = cfg.model(**cfg.model_params)
         checkpoint = torch.load(export_dir/f'fold{fold}.pt', 'cpu')
         fit_state_dict(checkpoint['model'], model)
-        try:
-            model.load_state_dict(checkpoint['model'])
-        except: # drop preprocess module for compatibility
-            model.cnn = nn.Sequential(
-                *[model.cnn[i+1] for i in range(len(model.cnn)-1)])
-            model.load_state_dict(checkpoint['model'])
-        scores.append(checkpoint['state']['best_score'])
+        model.load_state_dict(checkpoint['model'])
         del checkpoint; gc.collect()
         if cfg.parallel == 'ddp':
             model = nn.SyncBatchNorm.convert_sync_batchnorm(model)
-        
-        trainer = TorchTrainer(model, serial=f'fold{fold}', device=None)
-        trainer.register(hook=cfg.hook, callbacks=cfg.callbacks)
+        model.cuda()
+        model.eval()
 
-        if opt.tta: # flip wave TTA
-            LOGGER(f'[{fold}] pred0 {test_loader.dataset.transforms}')
-            prediction0 = trainer.predict(test_loader, progress_bar=opt.progress_bar)
+        pred, pred_tta, drop_flag = inference(test_loader, opt.tta, opt.drop_anomaly)
+        oof, _, _ = inference(valid_loader, False, False)
+        predictions[fold] = pred
+        predictions_tta[fold] = pred_tta
+        anomaly_flag[fold] = drop_flag
+        outoffolds[valid_idx] = oof
 
-            tta_transforms = A.Compose(
-                [A.HorizontalFlip(p=1)] + cfg.transforms['tta'].transforms
-            )
-            test_loader = make_tta_dataloader(test_loader, cfg.dataset, dict(
-                df=test, data_dir=cfg.test_dir,
-                transforms=tta_transforms, is_test=True, **cfg.dataset_params))
-            LOGGER(f'[{fold}] pred1 {test_loader.dataset.transforms}')
-            prediction1 = trainer.predict(test_loader, progress_bar=opt.progress_bar)
-
-            tta_transforms = A.Compose(
-                [A.VerticalFlip(p=1)] + cfg.transforms['tta'].transforms
-            )
-            test_loader = make_tta_dataloader(test_loader, cfg.dataset, dict(
-                df=test, data_dir=cfg.test_dir,
-                transforms=tta_transforms, is_test=True, **cfg.dataset_params))
-            LOGGER(f'[{fold}] pred2 {test_loader.dataset.transforms}')
-            prediction2 = trainer.predict(test_loader, progress_bar=opt.progress_bar)
-
-            prediction_fold = prediction0
-            prediction_fold_tta = (prediction0 + prediction1 + prediction2) / 3
-            predictions_tta[fold] = prediction_fold_tta
-        else:
-            prediction_fold = trainer.predict(test_loader, progress_bar=opt.progress_bar)
-        outoffold = trainer.predict(valid_loader, progress_bar=opt.progress_bar)
-
-        predictions[fold] = prediction_fold
-        outoffolds[valid_idx] = outoffold
-
-        del model, trainer, valid_data; gc.collect()
+        del model, valid_data; gc.collect()
         torch.cuda.empty_cache()
 
     np.save(export_dir/'outoffolds', outoffolds)
     np.save(export_dir/'predictions', predictions)
     if opt.tta:
         np.save(export_dir/'predictions_tta', predictions_tta)
+    if opt.drop_anomaly:
+        np.save(export_dir/'anomaly_flag', anomaly_flag)
         
     LOGGER(f'scores: {scores}')
     LOGGER(f'mean +- std: {np.mean(scores):.5f} +- {np.std(scores):.5f}')

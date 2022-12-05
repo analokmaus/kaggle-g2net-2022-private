@@ -303,7 +303,10 @@ class G2Net2022Dataset3(D.Dataset):
     def _load_spec(self, index):
         r = self.df.iloc[index]
         target = torch.tensor([r['target']]).float()
-        fname = self.data_dir/f'{r.id}.pickle'
+        if 'path' in self.df.columns:
+            fname = r['path']
+        else:
+            fname = self.data_dir/f'{r.id}.pickle'
         with open(fname, 'rb') as f:
             data = pickle.load(f)[r['id']]
         spec_h1, time_h1 = data['H1']['SFTs']*1e22, data['H1']['timestamps_GPS']

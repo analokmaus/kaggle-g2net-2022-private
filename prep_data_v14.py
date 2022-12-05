@@ -14,12 +14,12 @@ import os
 import shutil
 
 
-DATASET = 'v13'
+DATASET = 'v14'
 NUM_WORKERS = 40
 NUM_BUCKETS = 128
 REF_SX = 5e-24
 F1_MIN, F1_MAX = -11, -8 # new sampling
-DP_MIN, DP_MID, DP_MAX = 10, 25, 50
+DP_MIN, DP_MID, DP_MAX = 10, 30, 50
 C_SQRSX = 26.5
 TEST_DIR = Path('input/g2net-detecting-continuous-gravitational-waves/test/')
 TEST_PATH = Path('input/test_metadata.csv')

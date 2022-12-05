@@ -14,12 +14,12 @@ import os
 import shutil
 
 
-DATASET = 'v13'
+DATASET = 'v17'
 NUM_WORKERS = 40
-NUM_BUCKETS = 128
+NUM_BUCKETS = 256
 REF_SX = 5e-24
-F1_MIN, F1_MAX = -11, -8 # new sampling
-DP_MIN, DP_MID, DP_MAX = 10, 25, 50
+F1_MIN, F1_MAX = -12, -8 # new sampling
+DP_MIN, DP_MID, DP_MAX = 20, 35, 50
 C_SQRSX = 26.5
 TEST_DIR = Path('input/g2net-detecting-continuous-gravitational-waves/test/')
 TEST_PATH = Path('input/test_metadata.csv')
@@ -135,15 +135,16 @@ def make_data(gid, num_buckets=128, target='negative'):
                 signal_depth = np.random.uniform(DP_MID, DP_MAX)
 
             # H1
-            signal_variety = np.random.uniform(0.9, 1.1)
-            signal_kwargs['label'] = f'l1_signal'
+            signal_variety = np.random.uniform(0.95, 1.05)
+            signal_kwargs['label'] = f'h1_signal'
             signal_kwargs['h0'] = REF_SX * signal_variety / signal_depth
             signal_kwargs['noiseSFTs'] = ";".join(sorted(sft_paths_h1))
             writer = pyfstat.Writer(**signal_kwargs)
             writer.make_data()
             freqs_h1, times_h1, sft_data_h1 = get_sft_as_arrays(writer.sftfilepath)
             # L1
-            signal_variety = np.random.uniform(0.9, 1.1)
+            signal_variety = np.random.uniform(0.95, 1.05)
+            signal_kwargs['label'] = f'l1_signal'
             signal_kwargs['h0'] = REF_SX * signal_variety / signal_depth
             signal_kwargs['noiseSFTs'] = ";".join(sorted(sft_paths_l1))
             writer = pyfstat.Writer(**signal_kwargs)
