@@ -320,7 +320,7 @@ class SimpleCNN(nn.Module):
                                      num_classes=num_classes,
                                      **timm_params)
         self.mixup_mode = 'input'
-        if custom_classifier != 'none' or custom_attention != 'none':
+        if custom_classifier != 'none' or custom_attention != 'none' or custom_preprocess != 'none':
             model_type = self.cnn.__class__.__name__
             try:
                 feature_dim = self.cnn.get_classifier().in_features
@@ -328,7 +328,11 @@ class SimpleCNN(nn.Module):
             except:
                 raise ValueError(f'Unsupported model type: {model_type}')
 
-            preprocess = nn.Identity()
+            if custom_preprocess == 'debias':
+                C, _, H, W = self.cnn.conv_stem.weight.shape
+                preprocess = LargeKernel_debias(1, C, [H, W], 1, [H//2, W//2], 1, 1, False)
+            else:
+                preprocess = nn.Identity()
 
             if custom_attention == 'triplet':
                 attention = TripletAttention()
@@ -347,21 +351,6 @@ class SimpleCNN(nn.Module):
                 feature_dim = feature_dim * 2
             elif custom_classifier == 'gem':
                 global_pool = GeM(p=3, eps=1e-4)
-            # elif custom_classifier == 'positional':
-            #     global_pool = nn.Sequential(
-            #         AdaptiveGeM((1, None), p=3),
-            #         PositionalEncoding(),
-            #         nn.AdaptiveAvgPool2d((1, 1)))
-            elif custom_classifier == 'mixup':
-                global_pool = nn.Sequential(
-                    GeM(p=3, eps=1e-4),
-                    ManifoldMixup())
-                self.mixup_mode = 'manifold'
-            else:
-                raise ValueError(f'Unsupported classifier type: {custom_classifier}')
-            
-            if model_type[-11:] == 'Transformer' or model_type == 'XCiT': # transformer models
-                global_pool = nn.Identity()
 
             self.cnn = nn.Sequential(
                 preprocess, 

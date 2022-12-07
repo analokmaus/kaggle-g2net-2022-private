@@ -161,6 +161,39 @@ class Baseline3(Baseline): # replicate 733
     train_dir = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/v1/'
 
 
+class Baseline1d(Baseline3):
+    name = 'baseline1d'
+    model = ResNet1d
+    model_params = dict(
+        in_channels=2, 
+        base_filters=64,
+        kernel_size=16, 
+        stride=2, 
+        groups=64, 
+        n_block=16, 
+        n_classes=1,
+        use_bn=True,
+        dropout=0.2
+    )
+    dataset_params = dict(
+        preprocess=A.Compose([ToWaveform()])
+    )
+    transforms = dict(
+        train=A.Compose([
+            RandomCrop(4096),
+            WaveToTensor()]),
+        test=A.Compose([
+            CropImage(4096),
+            WaveToTensor()]),
+        tta=A.Compose([
+            CropImage(4096),
+            WaveToTensor()]),
+    )
+    train_path = Path('input/g2net-detecting-continuous-gravitational-waves/concat_v13_v14_v15.csv')
+    train_dir = None
+    optimizer_params = dict(lr=1e-3, weight_decay=1e-6)
+
+
 class Prep00(Baseline2): # global
     name = 'prep_00'
     dataset_params = dict(
@@ -514,6 +547,74 @@ class Ds09(Ds06):
     train_dir = None
 
 
+class Ds09mod0(Ds09):
+    name = 'ds_09_mod0'
+    model = create_RepLKNet31L
+    model_params = dict(
+        in_chans=2, num_classes=1
+    )
+    batch_size = 32
+    weight_path = Path('input/RepLKNet-31L_ImageNet-22K.pth')
+
+
+class Ds09mod0ddp(Ds09mod0):
+    name = 'ds_09_mod0_ddp'
+    parallel = 'ddp'
+    batch_size = 64 # 16 per gpu
+    optimizer_params = dict(lr=1e-3, weight_decay=1e-6)
+
+
+class Ds09mod1(Ds09):
+    name = 'ds_09_mod1'
+    model_params = dict(
+        model_name='tf_efficientnet_b2_ns',
+        pretrained=True,
+        num_classes=1,
+        timm_params=dict(in_chans=2)
+    )
+    batch_size = 64
+    optimizer_params = dict(lr=1e-3, weight_decay=1e-6)
+
+
+class Ds09mod2(Ds09):
+    name = 'ds_09_mod2'
+    model_params = dict(
+        model_name='tf_efficientnetv2_m_in21ft1k',
+        pretrained=True,
+        num_classes=1,
+        timm_params=dict(in_chans=2)
+    )
+    parallel = 'ddp'
+    batch_size = 64 # 16 per gpu
+    optimizer_params = dict(lr=1e-3, weight_decay=1e-6)
+
+
+class Ds09mod3(Ds09):
+    name = 'ds_09_mod3'
+    model_params = dict(
+        model_name='xcit_small_24_p8_224', 
+        pretrained=True,
+        num_classes=1,
+        timm_params=dict(in_chans=2, img_size=360, )
+    )
+    parallel = 'ddp'
+    batch_size = 64 # 16 per gpu
+    optimizer_params = dict(lr=1e-3, weight_decay=1e-6)
+
+
+class Ds09mod4(Ds09):
+    name = 'ds_09_mod4'
+    model_params = dict(
+        model_name='gluon_seresnext101_64x4d',
+        pretrained=True,
+        num_classes=1,
+        timm_params=dict(in_chans=2)
+    )
+    parallel = 'ddp'
+    batch_size = 64 # 16 per gpu
+    optimizer_params = dict(lr=1e-3, weight_decay=1e-6)
+
+
 class Ds10(Ds06):
     name = 'ds_10'
     depth_bins = [0, 20, 30, 40, 51, 1000]
@@ -597,38 +698,59 @@ class Res01(Ds09):
             CropImage(1024),
             ToTensorV2()]),
     )
-    # parallel = 'ddp'
-    # batch_size = 128 # 16 per gpu
-    # optimizer_params = dict(lr=1e-3, weight_decay=1e-6)
     batch_size = 16 # 16 per gpu
     optimizer_params = dict(lr=2e-4, weight_decay=1e-6)
 
 
-class Res01ddp(Res01):
-    name = 'res_01_ddp'
-    clip_grad = None
-    parallel = 'ddp'
-    batch_size = 32 # 8 per gpu
-    optimizer_params = dict(lr=5e-4, weight_decay=1e-6)
+class Res02(Ds09):
+    name = 'res_02'
+    dataset_params = dict(
+        preprocess=A.Compose([
+            ToSpectrogram(), AdaptiveResize(32), NormalizeSpectrogram('constant')]),
+        match_time=False)
+    transforms = dict(
+        train=A.Compose([
+            A.HorizontalFlip(p=0.5),
+            A.VerticalFlip(p=0.5),
+            ShiftImage(x_max=64, y_max=180, p=0.5),
+            MixupChannel(num_segments=20, fix_area=True, p=0.5),
+            RandomCrop(128),
+            ToTensorV2(),
+            FrequencyMaskingTensor(18, p=0.5),
+            FrequencyMaskingTensor(18, p=0.5),
+            FrequencyMaskingTensor(18, p=0.2),
+            TimeMaskingTensor(16, p=0.5),
+            TimeMaskingTensor(16, p=0.5),
+            TimeMaskingTensor(16, p=0.2)]),
+        test=A.Compose([
+            CropImage(128),
+            ToTensorV2()]),
+        tta=A.Compose([
+            CropImage(128),
+            ToTensorV2()]),
+    )
+    batch_size = 64
+    optimizer_params = dict(lr=1e-3, weight_decay=1e-6)
 
 
-class Aug01(Ds04prep1): # test noise type1
+class Aug01(Ds09): # 
     name = 'aug_01'
     transforms = dict(
         train=A.Compose([
             A.HorizontalFlip(p=0.5),
             A.VerticalFlip(p=0.5),
             ShiftImage(x_max=128, y_max=180, p=0.5),
-            MixupChannel(num_segments=20, fix_area=True, p=0.5),
             RandomCrop(256),
-            InjectTimeNoise('input/timenoise_v0.pickle', resize_factor=16, p=0.25),
+            MixupChannel(num_segments=20, fix_area=True, p=0.5),
+            RandomAmplify(p=0.25),
+            DropChannel(p=0.25),
             ToTensorV2(),
-            FrequencyMaskingTensor(18, p=0.5),
-            FrequencyMaskingTensor(18, p=0.5),
-            FrequencyMaskingTensor(18, p=0.2),
+            FrequencyMaskingTensor(24, p=0.5),
+            FrequencyMaskingTensor(24, p=0.5),
+            FrequencyMaskingTensor(24, p=0.5),
             TimeMaskingTensor(32, p=0.5),
             TimeMaskingTensor(32, p=0.5),
-            TimeMaskingTensor(32, p=0.2)]),
+            TimeMaskingTensor(32, p=0.5)]),
         test=A.Compose([
             CropImage(256),
             ToTensorV2()]),
@@ -638,68 +760,29 @@ class Aug01(Ds04prep1): # test noise type1
     )
 
 
-class Aug01ds0(Aug01):
-    name = 'aug_01_ds0'
-    train_path = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/v10.csv'
-    train_dir = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/v10/'
-
-
-class Aug01prep0(Aug01):
-    name = 'aug_01_prep0'
-    transforms = dict(
-        train=A.Compose([
-            A.HorizontalFlip(p=0.5),
-            A.VerticalFlip(p=0.5),
-            ShiftImage(x_max=128, y_max=180, p=0.5),
-            MixupChannel(num_segments=20, fix_area=True, p=0.5),
-            RandomCrop(256),
-            InjectTimeNoise('input/timenoise_v0.pickle', resize_factor=16, p=0.25),
-            ClipSignal(0, 1.0),
-            ToTensorV2(),
-            FrequencyMaskingTensor(18, p=0.5),
-            FrequencyMaskingTensor(18, p=0.5),
-            FrequencyMaskingTensor(18, p=0.2),
-            TimeMaskingTensor(32, p=0.5),
-            TimeMaskingTensor(32, p=0.5),
-            TimeMaskingTensor(32, p=0.2)]),
-        test=A.Compose([
-            CropImage(256),
-            ClipSignal(0, 1.0),
-            ToTensorV2()]),
-        tta=A.Compose([
-            CropImage(256),
-            ClipSignal(0, 1.0),
-            ToTensorV2()]),
-    )
-
-
-class Aug02(Ds04prep1): # time noise / anomaly
+class Aug02(Ds09): 
     name = 'aug_02'
     transforms = dict(
         train=A.Compose([
             A.HorizontalFlip(p=0.5),
             A.VerticalFlip(p=0.5),
             ShiftImage(x_max=128, y_max=180, p=0.5),
-            MixupChannel(num_segments=20, fix_area=True, p=0.5),
             RandomCrop(256),
-            InjectTimeNoise('input/timenoise_v1.pickle', strength=(0.9, 1.5), resize_factor=16, p=0.25),
-            InjectAnomaly('input/anomaly_v0_16.pickle', 'H1', p=0.05),
-            InjectAnomaly('input/anomaly_v0_16.pickle', 'L1', p=0.05),
-            ClipSignal(0, 3.0),
+            MixupChannel2(128, p=0.25),
+            RandomAmplify(p=0.25),
+            DropChannel(p=0.25),
             ToTensorV2(),
-            FrequencyMaskingTensor(18, p=0.5),
-            FrequencyMaskingTensor(18, p=0.5),
-            FrequencyMaskingTensor(18, p=0.2),
+            FrequencyMaskingTensor(24, p=0.5),
+            FrequencyMaskingTensor(24, p=0.5),
+            FrequencyMaskingTensor(24, p=0.5),
             TimeMaskingTensor(32, p=0.5),
             TimeMaskingTensor(32, p=0.5),
-            TimeMaskingTensor(32, p=0.2)]),
+            TimeMaskingTensor(32, p=0.5)]),
         test=A.Compose([
             CropImage(256),
-            ClipSignal(0, 3.0),
             ToTensorV2()]),
         tta=A.Compose([
             CropImage(256),
-            ClipSignal(0, 3.0),
             ToTensorV2()]),
     )
 
@@ -836,16 +919,16 @@ class Model00(Ds06):
     weight_path = Path('input/RepLKNet-31L_ImageNet-22K.pth')
 
 
-class Mixup00(Baseline2):
+class Mixup00(Ds09):
     name = 'mixup_00'
     hook = MixupTrain()
 
 
-class Mixup01(Baseline2):
+class Mixup01(Ds09):
     name = 'mixup_01'
     hook = MixupTrain(alpha=2.0)
 
 
-class Mixup02(Baseline2):
+class Mixup02(Ds09):
     name = 'mixup_03'
     hook = MixupTrain(lor_label=True)

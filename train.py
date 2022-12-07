@@ -14,6 +14,7 @@ from copy import deepcopy
 import pickle
 import traceback
 import albumentations as A
+from timm.models import convert_sync_batchnorm
 
 from kuma_utils.torch import TorchTrainer, TorchLogger
 from kuma_utils.torch.utils import get_time, seed_everything, fit_state_dict
@@ -122,7 +123,7 @@ if __name__ == "__main__":
     train = pd.read_csv(cfg.train_path)
     test = pd.read_csv(cfg.test_path)
     if cfg.debug:
-        train = train.iloc[:10000]
+        train = train.sample(10000)
         test = test.iloc[:1000]
     train = train.loc[train['target'] != -1]
     splitter = cfg.splitter
@@ -218,6 +219,8 @@ if __name__ == "__main__":
             notify_me(f'[{cfg.name}:fold{opt.limit_fold}]\nTraining started.')
         try:
             trainer = TorchTrainer(model, serial=f'fold{fold}', device=None)
+            trainer.ddp_sync_batch_norm = convert_sync_batchnorm
+            trainer.ddp_params = dict(broadcast_buffers=True)
             trainer.fit(**FIT_PARAMS)
         except Exception as e:
             err = traceback.format_exc()
@@ -271,7 +274,7 @@ if __name__ == "__main__":
         model.load_state_dict(checkpoint['model'])
         del checkpoint; gc.collect()
         if cfg.parallel == 'ddp':
-            model = nn.SyncBatchNorm.convert_sync_batchnorm(model)
+            model = convert_sync_batchnorm(model)
         model.cuda()
         model.eval()
 

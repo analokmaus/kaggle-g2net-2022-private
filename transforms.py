@@ -3,12 +3,16 @@ import torch
 import torch.nn.functional as F
 from torchaudio.transforms import FrequencyMasking, TimeMasking
 from albumentations.core.transforms_interface import ImageOnlyTransform, DualTransform
+from scipy.signal import istft, butter, filtfilt
 import math
 import matplotlib.pyplot as plt
 import random
 import pickle
 
 
+'''
+Spectromgram
+'''
 def adaptive_resize(img, resize_f, resize_func):
     f, t, ch = img.shape
     t2 = int((t // resize_f) * resize_f)
@@ -404,3 +408,58 @@ class InjectAnomaly(ImageOnlyTransform):
 
     def get_transform_init_args_names(self):
         return {'anomaly_file': self.anomaly_file, 'detector': self.detector}
+
+
+'''
+Waveform
+'''
+class ToWaveform(ImageOnlyTransform):
+    def __init__(self, always_apply=True, p=1.0):
+        super().__init__(always_apply, p)
+
+    def apply(self, img: np.ndarray, **params): # img: (freq, t, ch)
+        waveforms = []
+        for ch in range(img.shape[2]):
+            waveforms.append(istft(img[:, :, ch], nperseg=2)[1].reshape(1, -1)*10)
+        return np.stack(waveforms, axis=2) # (1, t, ch)
+
+    def get_transform_init_args_names(self):
+        return ()
+
+
+class WaveToTensor(ImageOnlyTransform):
+    def __init__(self, always_apply=True, p=1.0):
+        super().__init__(always_apply, p)
+
+    def apply(self, img: np.ndarray, **params): # img: (1, t, ch)
+        return torch.from_numpy(img).permute(2, 0, 1).squeeze(1).float()
+
+    def get_transform_init_args_names(self):
+        return ()
+
+
+class BandPass(ImageOnlyTransform):
+    def __init__(self, 
+                 lower=50,
+                 upper=500,
+                 sr=2048,
+                 order=8,
+                 always_apply=True, 
+                 p=1.0):
+        super().__init__(always_apply, p)
+        self.lower = lower
+        self.upper = upper
+        self.sr = sr
+        self.order = order
+        self._b, self._a = butter(
+            self.order, (self.lower, self.upper), btype='bandpass', fs=self.sr)
+        
+    def apply(self, img: np.ndarray, **params):
+        new_img = []
+        for ch in range(img.shape[2]):
+            new_img.append(filtfilt(self._b, self._a, img[:, :, ch].reshape(-1)).reshape(1, -1))
+        return np.stack(new_img, axis=2)
+
+    def get_transform_init_args_names(self):
+        return {'lower': self.lower, 'upper': self.upper, 'sr': self.sr}
+    
