@@ -49,9 +49,23 @@ class SimpleCNN(nn.Module):
             except:
                 raise ValueError(f'Unsupported model type: {model_type}')
 
-            if custom_preprocess == 'debias':
+            if custom_preprocess == 'laeyoung_debias':
                 C, _, H, W = self.cnn.conv_stem.weight.shape
                 preprocess = LargeKernel_debias(1, C, [H, W], 1, [H//2, W//2], 1, 1, False)
+            elif custom_preprocess == 'chris_debias':
+                preprocess = nn.Sequential(
+                    nn.Conv2d(2, 64, kernel_size=(3,31), stride=(1,2), padding=(3//2,31//2)),
+                    nn.GELU(),
+                    nn.Conv2d(64, 128, kernel_size=(5,5), stride=(1,2), padding=(5//2,5//2)),
+                    nn.GELU(),
+                )
+                timm_params.update({
+                    'in_chans': 128,
+                    'global_pool': '',
+                    'num_classes': 0
+                })
+                self.cnn = timm.create_model(model_name, 
+                    pretrained=pretrained, **timm_params)
             else:
                 preprocess = nn.Identity()
 
@@ -72,7 +86,9 @@ class SimpleCNN(nn.Module):
                 feature_dim = feature_dim * 2
             elif custom_classifier == 'gem':
                 global_pool = GeM(p=3, eps=1e-4)
-
+            else:
+                global_pool = nn.AdaptiveAvgPool2d((1, 1))
+            
             self.cnn = nn.Sequential(
                 preprocess, 
                 self.cnn, 

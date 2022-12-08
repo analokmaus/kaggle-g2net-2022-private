@@ -409,13 +409,12 @@ class ChrisDataset(D.Dataset):
         std0 = img[:, :, 0].std()
         mean1 = img[:, :, 1].mean()
         std1 = img[:, :, 1].std()
+        img = img - img.mean() 
+        img = img / img.std()
 
         if self.transforms:
             img = self.transforms(image=img)['image']
 
-        img = img - img.mean() 
-        img = img / img.std()
-        
         return img, torch.FloatTensor([freq]), \
             torch.FloatTensor([mean0]), torch.FloatTensor([std0]), \
                 torch.FloatTensor([mean1]), torch.FloatTensor([std1]), target

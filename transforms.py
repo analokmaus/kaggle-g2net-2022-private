@@ -13,9 +13,10 @@ import pickle
 '''
 Spectromgram
 '''
-def adaptive_resize(img, resize_f, resize_func):
+def adaptive_resize(img, img_size, resize_func):
     f, t, ch = img.shape
-    t2 = int((t // resize_f) * resize_f)
+    resize_f = t // img_size
+    t2 = img_size * resize_f
     img = resize_func(
         img[:, :t2, :].reshape(f, t2//resize_f, resize_f, ch), axis=2)
     return img
@@ -65,9 +66,10 @@ class NormalizeSpectrogram(ImageOnlyTransform):
     
 
 class AdaptiveResize(ImageOnlyTransform):
-    def __init__(self, resize_factor=16, method='mean', always_apply=True, p=1.0):
+    def __init__(self, resize_factor=16, img_size=None, method='mean', always_apply=True, p=1.0):
         super().__init__(always_apply, p)
         self.resize_f = resize_factor
+        self.img_size = img_size
         assert method in ['mean', 'max']
         self.method = method
         if self.method == 'mean':
@@ -76,10 +78,14 @@ class AdaptiveResize(ImageOnlyTransform):
             self.resize_func = np.max
 
     def apply(self, img: np.ndarray, **params): # img: (freq, t, ch)
-        return adaptive_resize(img, self.resize_f, self.resize_func)
+        if self.img_size is None:
+            img_size = img.shape[1] // self.resize_f
+        else:
+            img_size = self.img_size
+        return adaptive_resize(img, img_size, self.resize_func)
 
     def get_transform_init_args_names(self):
-        return {'resize_f': self.resize_f, 'method': self.method}
+        return {'resize_f': self.resize_f, 'img_size': self.img_size, 'method': self.method}
 
 
 class RandomAmplify(ImageOnlyTransform):
@@ -350,9 +356,9 @@ class InjectTimeNoise(ImageOnlyTransform):
         tnoise_h1 = random.choice(self.noise_dict['H1']) # (t1,)
         tnoise_l1 = random.choice(self.noise_dict['L1']) # (t2,)
         tnoise_h1 = adaptive_resize(
-            np.repeat(tnoise_h1[None, :], img.shape[0], axis=0)[:, :, None], self.resize_f, np.mean)[:, :, 0]
+            np.repeat(tnoise_h1[None, :], img.shape[0] // self.resize_f, axis=0)[:, :, None], self.resize_f, np.mean)[:, :, 0]
         tnoise_l1 = adaptive_resize(
-            np.repeat(tnoise_l1[None, :], img.shape[0], axis=0)[:, :, None], self.resize_f, np.mean)[:, :, 0]
+            np.repeat(tnoise_l1[None, :], img.shape[0] // self.resize_f, axis=0)[:, :, None], self.resize_f, np.mean)[:, :, 0]
         noise_std = np.random.uniform(img.std()*0.9, img.std()*1.1)
         noise_scale = np.random.uniform(self.strength[0], self.strength[1])
         tnoise_h1 += np.random.normal(0, noise_std, size=[*tnoise_h1.shape])

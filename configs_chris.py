@@ -88,3 +88,23 @@ class Chrisv16:
 
     pseudo_labels = None
     debug = False
+
+
+class C16aug0(Chrisv16):
+    name = 'chris_v16_aug0'
+    transforms = dict(
+        train=A.Compose([
+            A.HorizontalFlip(p=0.5),
+            A.VerticalFlip(p=0.5),
+            RandomAmplify(p=0.5),
+            DropChannel(p=0.25),
+            ToTensorV2(),
+            FrequencyMaskingTensor(24, p=0.5),
+            FrequencyMaskingTensor(24, p=0.5),
+            FrequencyMaskingTensor(24, p=0.5),
+            TimeMaskingTensor(72, p=0.5),
+            TimeMaskingTensor(72, p=0.5),
+            TimeMaskingTensor(72, p=0.5)]),
+        test=A.Compose([ToTensorV2()]),
+        tta=A.Compose([ToTensorV2()]),
+    )

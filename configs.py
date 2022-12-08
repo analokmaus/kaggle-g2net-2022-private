@@ -194,74 +194,6 @@ class Baseline1d(Baseline3):
     optimizer_params = dict(lr=1e-3, weight_decay=1e-6)
 
 
-class Prep00(Baseline2): # global
-    name = 'prep_00'
-    dataset_params = dict(
-        normalize='global', 
-        resize_factor=16, 
-        spec_diff=True,
-        match_time=False)
-
-
-class Prep01(Baseline2): # global 4ch
-    name = 'prep_01'
-    dataset = G2Net2022Dataset3
-    dataset_params = dict(
-        preprocess=A.Compose([
-            ToSpectrogram(), AdaptiveResize(16), NormalizeSpectrogram('concat')
-        ]),
-        match_time=False)
-    model_params = dict(
-        model_name='tf_efficientnet_b6_ns',
-        pretrained=True,
-        num_classes=1,
-        timm_params=dict(in_chans=4)
-    )
-    train_path = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/v7.csv'
-    train_dir = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/v7/'
-    
-
-class Prep02(Baseline2): # global 2ch
-    name = 'prep_02'
-    dataset = G2Net2022Dataset3
-    dataset_params = dict(
-        preprocess=A.Compose([
-            ToSpectrogram(), AdaptiveResize(16), NormalizeSpectrogram('constant')
-        ]),
-        match_time=False)
-    model_params = dict(
-        model_name='tf_efficientnet_b6_ns',
-        pretrained=True,
-        num_classes=1,
-        timm_params=dict(in_chans=2)
-    )
-    train_path = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/v7.csv'
-    train_dir = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/v7/'
-
-
-class Prep02ds0(Prep02):
-    name = 'prep_02_ds0'
-    train_path = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/v9.csv'
-    train_dir = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/v9/'
-
-
-class Prep03(Baseline3): # mean 2ch
-    name = 'prep_03'
-    dataset_params = dict(
-        preprocess=A.Compose([
-            ToSpectrogram(), AdaptiveResize(16), NormalizeSpectrogram('mean')
-        ]),
-        match_time=False)
-    model_params = dict(
-        model_name='tf_efficientnet_b6_ns',
-        pretrained=True,
-        num_classes=1,
-        timm_params=dict(in_chans=2)
-    )
-    train_path = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/v10.csv'
-    train_dir = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/v10/'
-
-
 class Ds00(Baseline2): # v7
     name = 'ds_00'
     train_path = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/v7.csv'
@@ -615,6 +547,66 @@ class Ds09mod4(Ds09):
     optimizer_params = dict(lr=1e-3, weight_decay=1e-6)
 
 
+class Ds09mod5(Ds09):
+    name = 'ds_09_mod5'
+    model_params = dict(
+        model_name='tf_efficientnet_b7_ns',
+        pretrained=True,
+        num_classes=1,
+        timm_params=dict(in_chans=2),
+        custom_preprocess='chris_debias',
+        custom_classifier='avg'
+    )
+    parallel = 'ddp'
+    batch_size = 64
+    optimizer_params = dict(lr=1e-3, weight_decay=1e-6)
+
+
+class Ds09prep0(Ds09): # cf. Aug03
+    name = 'ds_09_prep0'
+    dataset_params = dict(
+        preprocess=A.Compose([
+            ToSpectrogram(), AdaptiveResize(img_size=720), 
+            NormalizeSpectrogram('constant')
+        ]),
+        match_time=False)
+    parallel = 'ddp'
+    batch_size = 64
+    optimizer_params = dict(lr=1e-3, weight_decay=1e-6)
+    transforms = dict(
+        train=A.Compose([
+            A.HorizontalFlip(p=0.5),
+            A.VerticalFlip(p=0.5),
+            ShiftImage(x_max=360, y_max=180, p=0.5),
+            RandomAmplify(p=0.25),
+            DropChannel(p=0.25),
+            ToTensorV2(),
+            FrequencyMaskingTensor(24, p=0.5),
+            FrequencyMaskingTensor(24, p=0.5),
+            FrequencyMaskingTensor(24, p=0.5),
+            TimeMaskingTensor(96, p=0.5),
+            TimeMaskingTensor(96, p=0.5),
+            TimeMaskingTensor(96, p=0.5)]),
+        test=A.Compose([
+            ToTensorV2()]),
+        tta=A.Compose([
+            ToTensorV2()]),
+    )
+
+
+class Ds09prep1(Ds09): # cf. Aug03
+    name = 'ds_09_prep1'
+    dataset_params = dict(
+        preprocess=A.Compose([
+            ToSpectrogram(), AdaptiveResize(16), 
+            NormalizeSpectrogram('chris')
+        ]),
+        match_time=False)
+    parallel = 'ddp'
+    batch_size = 64
+    optimizer_params = dict(lr=1e-3, weight_decay=1e-6)
+
+
 class Ds10(Ds06):
     name = 'ds_10'
     depth_bins = [0, 20, 30, 40, 51, 1000]
@@ -787,21 +779,17 @@ class Aug02(Ds09):
     )
 
 
-class Aug03(Ds04prep1):
+class Aug03(Ds09):
     name = 'aug_03'
     transforms = dict(
         train=A.Compose([
             A.HorizontalFlip(p=0.5),
             A.VerticalFlip(p=0.5),
-            ShiftImage(x_max=0, y_max=180, p=0.5),
-            MixupChannel(num_segments=20, fix_area=True, p=0.5),
             RandomCrop(256),
-            InjectTimeNoise('input/timenoise_v1.pickle', strength=(0.9, 1.5), resize_factor=16, p=0.5),
-            RandomAmplify(p=0.5),
             ToTensorV2(),
-            FrequencyMaskingTensor(18, p=0.5),
-            FrequencyMaskingTensor(18, p=0.5),
-            FrequencyMaskingTensor(18, p=0.5),
+            FrequencyMaskingTensor(24, p=0.5),
+            FrequencyMaskingTensor(24, p=0.5),
+            FrequencyMaskingTensor(24, p=0.5),
             TimeMaskingTensor(32, p=0.5),
             TimeMaskingTensor(32, p=0.5),
             TimeMaskingTensor(32, p=0.5)]),
@@ -812,6 +800,9 @@ class Aug03(Ds04prep1):
             CropImage(256),
             ToTensorV2()]),
     )
+    parallel = 'ddp'
+    batch_size = 64
+    optimizer_params = dict(lr=1e-3, weight_decay=1e-6)
 
 
 class Aug04(Ds04prep1):

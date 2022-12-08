@@ -46,7 +46,8 @@ def inference(data_loader, tta=False, drop_anomaly=False):
                 else:
                     drop_flag.append(0)
         else:
-            drop_flag.append(0)
+            for i in range(specs.shape[0]): 
+                drop_flag.append(0)
 
         if tta:
             specs_aug1 = torch.flip(specs, (2,))
