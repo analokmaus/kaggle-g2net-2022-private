@@ -1,5 +1,4 @@
 import numpy as np
-from multiprocessing import Pool
 import torch
 import torch.utils.data as D
 import matplotlib.pyplot as plt
@@ -24,7 +23,7 @@ def laeyoung_normalize(sft):
 '''
 Dataset
 '''
-class G2Net2022Dataset(D.Dataset):
+class G2Net2022Dataset(D.Dataset): # do NOT use
     '''
     '''
     def __init__(
@@ -142,7 +141,7 @@ class G2Net2022Dataset(D.Dataset):
         return img, target
 
 
-class G2Net2022Dataset2(D.Dataset):
+class G2Net2022Dataset2(D.Dataset): # Do NOT use
     '''
     '''
     def __init__(
@@ -335,3 +334,88 @@ class G2Net2022Dataset3(D.Dataset):
             img = self.transforms(image=img)['image']
         
         return img, target
+
+
+class ChrisDataset(D.Dataset):
+    '''
+    '''
+    def __init__(
+        self, 
+        df, 
+        data_dir=Path('input/g2net-detecting-continuous-gravitational-waves/train'),
+        match_time=False,
+        img_size=720,
+        max_size=6000,
+        is_test=False,
+        preprocess=None, # Ignore
+        transforms=None,
+        ):
+        self.df = df
+        self.data_dir = data_dir
+        self.match = match_time
+        self.img_size = img_size
+        self.max_size = max_size
+        self.preprocess = preprocess
+        self.transforms = transforms
+        self.is_test = is_test
+
+    def __len__(self):
+        return len(self.df)
+    
+    def __getitem__(self, index):
+        return self._load_spec(index)
+
+    def _load_spec(self, index):
+        r = self.df.iloc[index]
+        target = torch.tensor([r['target']]).float()
+        if 'path' in self.df.columns:
+            fname = r['path']
+        else:
+            fname = self.data_dir/f'{r.id}.pickle'
+        with open(fname, 'rb') as f:
+            data = pickle.load(f)[r['id']]
+        spec_h1, time_h1 = data['H1']['SFTs']*1e22, data['H1']['timestamps_GPS']
+        spec_l1, time_l1 = data['L1']['SFTs']*1e22, data['L1']['timestamps_GPS']
+        freq = data['frequency_Hz'][0]
+
+        if self.match:
+            _spec = np.full((2, 360, 5760), 0., np.complex64)
+            ref_time = min(time_h1.min(), time_l1.min())
+            frame_h1 = ((time_h1 - ref_time) / 1800).round().astype(np.uint64)
+            frame_l1 = ((time_l1 - ref_time) / 1800).round().astype(np.uint64)
+            _spec[0][:, frame_h1[frame_h1 < 5760]] = spec_h1[:, frame_h1 < 5760]
+            _spec[1][:, frame_l1[frame_l1 < 5760]] = spec_l1[:, frame_l1 < 5760]
+            spec_h1, spec_l1 = _spec[0], _spec[1]
+        else:
+            if spec_h1.shape[1] < spec_l1.shape[1]:
+                spec_l1 = spec_l1[:, :spec_h1.shape[1]]
+            elif spec_h1.shape[1] > spec_l1.shape[1]:
+                spec_h1 = spec_h1[:, :spec_l1.shape[1]]
+
+        # img = np.stack((spec_h1, spec_l1), axis=2) # (360, t, 2)
+        # if self.preprocess:
+        #     img = self.preprocess(image=img)['image']
+
+        img = np.zeros((360, self.img_size, 2), dtype=np.float32)
+        for ch, spec in enumerate([spec_h1, spec_l1]):
+            across = int(spec.shape[1] / self.img_size)
+            across = min(across, int(self.max_size / self.img_size))
+            spec = spec[:, :(across*self.img_size)].real**2 + spec[:, :(across*self.img_size)].imag**2
+            spec /= np.mean(spec)  # normalize
+            # p = wiener(p, (3, 13))
+            spec = np.mean(spec.reshape(360, self.img_size, across), axis=2)
+            img[:, :, ch] = spec
+        mean0 = img[:, :, 0].mean()
+        std0 = img[:, :, 0].std()
+        mean1 = img[:, :, 1].mean()
+        std1 = img[:, :, 1].std()
+
+        if self.transforms:
+            img = self.transforms(image=img)['image']
+
+        img = img - img.mean() 
+        img = img / img.std()
+        
+        return img, torch.FloatTensor([freq]), \
+            torch.FloatTensor([mean0]), torch.FloatTensor([std0]), \
+                torch.FloatTensor([mean1]), torch.FloatTensor([std1]), target

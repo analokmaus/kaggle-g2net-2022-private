@@ -35,7 +35,7 @@ class ToSpectrogram(ImageOnlyTransform):
 class NormalizeSpectrogram(ImageOnlyTransform):
     def __init__(self, method='mean', always_apply=True, p=1.0):
         super().__init__(always_apply, p)
-        assert method in ['mean', 'constant', 'median', 'concat']
+        assert method in ['mean', 'constant', 'median', 'concat', 'chris']
         self.method = method
 
     def apply(self, img: np.ndarray, **params): # img: (freq, t, ch)
@@ -53,6 +53,11 @@ class NormalizeSpectrogram(ImageOnlyTransform):
                 img2[:, :, 2*ch] = img[:, :, ch] / img[:, :, ch].mean() 
                 img2[:, :, 2*ch+1] = img[:, :, ch] / 13.
             img = img2
+        elif self.method == 'chris':
+            for ch in range(img.shape[2]):
+                img[:, :, ch] /= img[:, :, ch].mean() 
+                img[:, :, ch] -= img[:, :, ch].mean()
+                img[:, :, ch] /= img[:, :, ch].std()
         return img
 
     def get_transform_init_args_names(self):

@@ -20,6 +20,8 @@ from kuma_utils.torch import TorchTrainer, TorchLogger
 from kuma_utils.torch.utils import get_time, seed_everything, fit_state_dict
 
 from configs import *
+from configs_chris import *
+from team.chris_model import forward_test_chris
 from utils import print_config, notify_me
 from training_extras import make_tta_dataloader
 
@@ -28,8 +30,13 @@ def inference(data_loader, tta=False, drop_anomaly=False):
     predictions = []
     predictions_tta = []
     drop_flag = []
-    for idx, (specs, _) in enumerate(data_loader):
-        specs = specs.cuda() # (n, ch, f, t)
+    for idx, inputs in enumerate(data_loader):
+        if len(inputs) == 2:
+            specs, _ = inputs
+            specs = specs.cuda() # (n, ch, f, t)
+        elif len(inputs) > 2:
+            inputs = [input_t.cuda() for input_t in inputs]
+            specs = inputs[0]
 
         if drop_anomaly:
             for i in range(specs.shape[0]): 
@@ -46,10 +53,16 @@ def inference(data_loader, tta=False, drop_anomaly=False):
             specs_aug2 = torch.flip(specs, (3,))
 
         with torch.no_grad():
-            pred0 = model(specs).cpu().numpy()
-            if tta:
-                pred1 = model(specs_aug1).cpu().numpy()
-                pred2 = model(specs_aug2).cpu().numpy()
+            if len(inputs) == 2:
+                pred0 = model(specs).cpu().numpy()
+                if tta:
+                    pred1 = model(specs_aug1).cpu().numpy()
+                    pred2 = model(specs_aug2).cpu().numpy()
+            elif len(inputs) > 2:
+                pred0 = forward_test_chris(model, specs, inputs).cpu().numpy()
+                if tta:
+                    pred1 = forward_test_chris(model, specs_aug1, inputs).cpu().numpy()
+                    pred2 = forward_test_chris(model, specs_aug2, inputs).cpu().numpy()
             
         predictions.append(pred0)
         if tta:
