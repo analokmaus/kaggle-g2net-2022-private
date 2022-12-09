@@ -567,12 +567,12 @@ class Ds09prep0(Ds09): # cf. Aug03
     dataset_params = dict(
         preprocess=A.Compose([
             ToSpectrogram(), AdaptiveResize(img_size=720), 
-            NormalizeSpectrogram('constant')
+            NormalizeSpectrogram('chris')
         ]),
         match_time=False)
     parallel = 'ddp'
-    batch_size = 64
-    optimizer_params = dict(lr=1e-3, weight_decay=1e-6)
+    batch_size = 32
+    optimizer_params = dict(lr=5e-4, weight_decay=1e-6)
     transforms = dict(
         train=A.Compose([
             A.HorizontalFlip(p=0.5),
@@ -591,6 +591,18 @@ class Ds09prep0(Ds09): # cf. Aug03
             ToTensorV2()]),
         tta=A.Compose([
             ToTensorV2()]),
+    )
+
+
+class Ds09mod6(Ds09prep0):
+    name = 'ds_09_mod6'
+    model_params = dict(
+        model_name='tf_efficientnet_b7_ns',
+        pretrained=True,
+        num_classes=1,
+        timm_params=dict(in_chans=2),
+        custom_preprocess='chris_debias',
+        custom_classifier='avg'
     )
 
 

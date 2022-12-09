@@ -48,7 +48,8 @@ class Modelv16(nn.Module):
             nn.GELU(),
             nn.Linear(512, 256),
             nn.GELU(),
-            nn.Linear(256, 2)
+            # nn.Linear(256, 2)
+            nn.Linear(256, 1)
         )
         self.model = model
         
@@ -121,7 +122,8 @@ class ChrisTrain(SimpleHook):
         y_pred1, y_pred2, y_pred3, y_pred4, y_pred5, y_pred6, y_pred7, y_pred8, y_pred9, y_pred10 = trainer.model(*inputs[:-1])
         approx = (y_pred1 + y_pred2 + y_pred3 + y_pred4 + y_pred5 + y_pred6 + y_pred7 + y_pred8 + y_pred9 + y_pred10) / 10.0
         loss = trainer.criterion(approx, target)
-        return loss, approx[:, 0].view(-1, 1).detach() # drop mse output
+        # return loss, approx[:, 0].view(-1, 1).detach() # drop mse output
+        return loss, approx
 
     def forward_valid(self, trainer, inputs):
         return self.forward_train(trainer, inputs)
@@ -129,7 +131,8 @@ class ChrisTrain(SimpleHook):
     def forward_test(self, trainer, inputs):
         y_pred1, y_pred2, y_pred3, y_pred4, y_pred5, y_pred6, y_pred7, y_pred8, y_pred9, y_pred10 = trainer.model(*inputs[:-1])
         approx = (y_pred1 + y_pred2 + y_pred3 + y_pred4 + y_pred5 + y_pred6 + y_pred7 + y_pred8 + y_pred9 + y_pred10) / 10.0
-        return approx[:, 0].view(-1, 1)
+        # return approx[:, 0].view(-1, 1)
+        return approx
 
     def __repr__(self) -> str:
         return f'ChrisTrain()'
@@ -138,4 +141,5 @@ class ChrisTrain(SimpleHook):
 def forward_test_chris(model, specs, inputs):
     y_pred1, y_pred2, y_pred3, y_pred4, y_pred5, y_pred6, y_pred7, y_pred8, y_pred9, y_pred10 = model(specs, *inputs[1:-1])
     approx = (y_pred1 + y_pred2 + y_pred3 + y_pred4 + y_pred5 + y_pred6 + y_pred7 + y_pred8 + y_pred9 + y_pred10) / 10.0
-    return approx[:, 0].view(-1, 1)
+    # return approx[:, 0].view(-1, 1)
+    return approx

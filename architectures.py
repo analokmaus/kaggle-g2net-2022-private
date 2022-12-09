@@ -59,13 +59,14 @@ class SimpleCNN(nn.Module):
                     nn.Conv2d(64, 128, kernel_size=(5,5), stride=(1,2), padding=(5//2,5//2)),
                     nn.GELU(),
                 )
-                timm_params.update({
+                timm_params2 = timm_params.copy()
+                timm_params2.update({
                     'in_chans': 128,
                     'global_pool': '',
                     'num_classes': 0
                 })
                 self.cnn = timm.create_model(model_name, 
-                    pretrained=pretrained, **timm_params)
+                    pretrained=pretrained, **timm_params2)
             else:
                 preprocess = nn.Identity()
 

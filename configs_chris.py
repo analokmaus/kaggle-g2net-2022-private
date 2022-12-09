@@ -57,7 +57,7 @@ class Chrisv16:
     scheduler_params = dict(T_0=5, T_mult=1, eta_min=1e-6)
     scheduler_target = None
     batch_scheduler = False
-    criterion = ChrisLoss()
+    criterion = BCEWithLogitsLoss()
     eval_metric = AUC().torch
     monitor_metrics = []
     amp = True
@@ -97,6 +97,7 @@ class C16aug0(Chrisv16):
             A.HorizontalFlip(p=0.5),
             A.VerticalFlip(p=0.5),
             RandomAmplify(p=0.5),
+            ClipSignal(-20, 20),
             DropChannel(p=0.25),
             ToTensorV2(),
             FrequencyMaskingTensor(24, p=0.5),
@@ -105,6 +106,28 @@ class C16aug0(Chrisv16):
             TimeMaskingTensor(72, p=0.5),
             TimeMaskingTensor(72, p=0.5),
             TimeMaskingTensor(72, p=0.5)]),
-        test=A.Compose([ToTensorV2()]),
-        tta=A.Compose([ToTensorV2()]),
+        test=A.Compose([ClipSignal(-20, 20), ToTensorV2()]),
+        tta=A.Compose([ClipSignal(-20, 20), ToTensorV2()]),
+    )
+
+
+class C16aug1(Chrisv16):
+    name = 'chris_v16_aug1'
+    transforms = dict(
+        train=A.Compose([
+            A.HorizontalFlip(p=0.5),
+            A.VerticalFlip(p=0.5),
+            ShiftImage(x_max=360, y_max=180, p=0.5),
+            RandomAmplify(p=0.5),
+            ClipSignal(-20, 20),
+            DropChannel(p=0.25),
+            ToTensorV2(),
+            FrequencyMaskingTensor(24, p=0.5),
+            FrequencyMaskingTensor(24, p=0.5),
+            FrequencyMaskingTensor(24, p=0.5),
+            TimeMaskingTensor(72, p=0.5),
+            TimeMaskingTensor(72, p=0.5),
+            TimeMaskingTensor(72, p=0.5)]),
+        test=A.Compose([ClipSignal(-20, 20), ToTensorV2()]),
+        tta=A.Compose([ClipSignal(-20, 20), ToTensorV2()]),
     )
