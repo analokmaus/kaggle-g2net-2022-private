@@ -86,6 +86,7 @@ if __name__ == "__main__":
     parser.add_argument("--config", type=str, default='Baseline',
                         help="config name in configs.py")
     parser.add_argument("--num_workers", type=int, default=0)
+    parser.add_argument("--cache_limit", type=int, default=0) # in GB
     parser.add_argument("--limit_fold", type=int, default=-1,
                         help="train only specified fold")
     parser.add_argument("--inference", action='store_true',
@@ -184,7 +185,8 @@ if __name__ == "__main__":
 
         train_data = cfg.dataset(
             df=train_fold, data_dir=cfg.train_dir,
-            transforms=cfg.transforms['train'], is_test=False, **cfg.dataset_params)
+            transforms=cfg.transforms['train'], is_test=False, 
+            **dict(cfg.dataset_params, **{'cache_limit': opt.cache_limit}))
         train_data.cache = cache
         valid_data = cfg.dataset(
             df=valid_fold, data_dir = cfg.train_dir,
@@ -291,7 +293,7 @@ if __name__ == "__main__":
         valid_data = cfg.dataset(
             df=valid_fold, data_dir = cfg.train_dir,
             transforms=cfg.transforms['tta'], is_test=True, 
-            **cfg.dataset_params)
+            **dict(cfg.dataset_params, **{'cache_limit': opt.cache_limit}))
         valid_data.cache = cache
         valid_loader = D.DataLoader(
             valid_data, batch_size=cfg.batch_size, shuffle=False,

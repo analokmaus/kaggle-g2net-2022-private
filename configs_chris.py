@@ -94,7 +94,6 @@ class C16val0(Chrisv16):
     name = 'chris_v16_val0'
     splitter = StratifiedGroupKFold(n_splits=5, shuffle=True, random_state=Chrisv16.seed)
     depth_bins = None
-    dataset_params = dict(Chrisv16.dataset_params, **{'cache_limit': 160})
 
 
 class C16aug0(Chrisv16):
