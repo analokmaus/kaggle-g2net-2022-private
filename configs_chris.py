@@ -3,7 +3,7 @@ from pathlib import Path
 import torch.nn as nn
 import torch.optim as optim
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
-from sklearn.model_selection import StratifiedKFold
+from sklearn.model_selection import StratifiedKFold, StratifiedGroupKFold
 import albumentations as A
 from albumentations.pytorch.transforms import ToTensorV2
 from transforms import FrequencyMaskingTensor, TimeMaskingTensor
@@ -67,7 +67,7 @@ class Chrisv16:
     max_grad_norm = 10000
     hook = ChrisTrain()
     callbacks = [
-        EarlyStopping(patience=5, maximize=True, skip_epoch=4),
+        EarlyStopping(patience=10, maximize=True, skip_epoch=4),
         SaveSnapshot()
     ]
 
@@ -90,14 +90,19 @@ class Chrisv16:
     debug = False
 
 
+class C16val0(Chrisv16):
+    name = 'chris_v16_val0'
+    splitter = StratifiedGroupKFold(n_splits=5, shuffle=True, random_state=Chrisv16.seed)
+    depth_bins = None
+    dataset_params = dict(Chrisv16.dataset_params, **{'cache_limit': 160})
+
+
 class C16aug0(Chrisv16):
     name = 'chris_v16_aug0'
     transforms = dict(
         train=A.Compose([
             A.HorizontalFlip(p=0.5),
             A.VerticalFlip(p=0.5),
-            RandomAmplify(p=0.5),
-            ClipSignal(-20, 20),
             DropChannel(p=0.25),
             ToTensorV2(),
             FrequencyMaskingTensor(24, p=0.5),
@@ -106,8 +111,8 @@ class C16aug0(Chrisv16):
             TimeMaskingTensor(72, p=0.5),
             TimeMaskingTensor(72, p=0.5),
             TimeMaskingTensor(72, p=0.5)]),
-        test=A.Compose([ClipSignal(-20, 20), ToTensorV2()]),
-        tta=A.Compose([ClipSignal(-20, 20), ToTensorV2()]),
+        test=A.Compose([ToTensorV2()]),
+        tta=A.Compose([ToTensorV2()]),
     )
 
 
@@ -117,7 +122,6 @@ class C16aug1(Chrisv16):
         train=A.Compose([
             A.HorizontalFlip(p=0.5),
             A.VerticalFlip(p=0.5),
-            ShiftImage(x_max=360, y_max=180, p=0.5),
             RandomAmplify(p=0.5),
             ClipSignal(-20, 20),
             DropChannel(p=0.25),

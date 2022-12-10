@@ -3,7 +3,7 @@ from pathlib import Path
 import torch.nn as nn
 import torch.optim as optim
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
-from sklearn.model_selection import StratifiedKFold
+from sklearn.model_selection import StratifiedKFold, StratifiedGroupKFold
 import albumentations as A
 from albumentations.pytorch.transforms import ToTensorV2
 from transforms import FrequencyMaskingTensor, TimeMaskingTensor
@@ -619,6 +619,12 @@ class Ds09prep1(Ds09): # cf. Aug03
     optimizer_params = dict(lr=1e-3, weight_decay=1e-6)
 
 
+class Ds09val0(Ds09mod6):
+    name = 'ds_09_val0'
+    splitter = StratifiedGroupKFold(n_splits=5, shuffle=True, random_state=Baseline.seed)
+    depth_bins = None
+
+
 class Ds10(Ds06):
     name = 'ds_10'
     depth_bins = [0, 20, 30, 40, 51, 1000]
@@ -817,99 +823,99 @@ class Aug03(Ds09):
     optimizer_params = dict(lr=1e-3, weight_decay=1e-6)
 
 
-class Aug04(Ds04prep1):
-    name = 'aug_04'
-    transforms = dict(
-        train=A.Compose([
-            A.HorizontalFlip(p=0.5),
-            A.VerticalFlip(p=0.5),
-            ShiftImage(x_max=0, y_max=180, p=0.5),
-            MixupChannel(num_segments=20, fix_area=True, p=0.5),
-            RandomCrop(256),
-            InjectTimeNoise('input/timenoise_v0.pickle', strength=(0.9, 1.5), resize_factor=16, p=0.5),
-            RandomAmplify(p=0.5),
-            DropChannel(p=0.25),
-            ToTensorV2(),
-            FrequencyMaskingTensor(18, p=0.5),
-            FrequencyMaskingTensor(18, p=0.5),
-            FrequencyMaskingTensor(18, p=0.2),
-            TimeMaskingTensor(32, p=0.5),
-            TimeMaskingTensor(32, p=0.5),
-            TimeMaskingTensor(32, p=0.2)]),
-        test=A.Compose([
-            CropImage(256),
-            ToTensorV2()]),
-        tta=A.Compose([
-            CropImage(256),
-            ToTensorV2()]),
-    )
+# class Aug04(Ds04prep1):
+#     name = 'aug_04'
+#     transforms = dict(
+#         train=A.Compose([
+#             A.HorizontalFlip(p=0.5),
+#             A.VerticalFlip(p=0.5),
+#             ShiftImage(x_max=0, y_max=180, p=0.5),
+#             MixupChannel(num_segments=20, fix_area=True, p=0.5),
+#             RandomCrop(256),
+#             InjectTimeNoise('input/timenoise_v0.pickle', strength=(0.9, 1.5), resize_factor=16, p=0.5),
+#             RandomAmplify(p=0.5),
+#             DropChannel(p=0.25),
+#             ToTensorV2(),
+#             FrequencyMaskingTensor(18, p=0.5),
+#             FrequencyMaskingTensor(18, p=0.5),
+#             FrequencyMaskingTensor(18, p=0.2),
+#             TimeMaskingTensor(32, p=0.5),
+#             TimeMaskingTensor(32, p=0.5),
+#             TimeMaskingTensor(32, p=0.2)]),
+#         test=A.Compose([
+#             CropImage(256),
+#             ToTensorV2()]),
+#         tta=A.Compose([
+#             CropImage(256),
+#             ToTensorV2()]),
+#     )
 
 
-class Aug05(Ds04prep1):
-    name = 'aug_05'
-    transforms = dict(
-        train=A.Compose([
-            A.HorizontalFlip(p=0.5),
-            A.VerticalFlip(p=0.5),
-            ShiftImage(x_max=0, y_max=180, p=0.5),
-            MixupChannel(num_segments=20, fix_area=True, p=0.5),
-            RandomCrop(256),
-            InjectTimeNoise('input/timenoise_v2.pickle', strength=(0.9, 1.5), resize_factor=16, p=0.4),
-            RandomAmplify(p=0.5),
-            DropChannel(p=0.25),
-            ToTensorV2(),
-            FrequencyMaskingTensor(18, p=0.5),
-            FrequencyMaskingTensor(18, p=0.5),
-            FrequencyMaskingTensor(18, p=0.2),
-            TimeMaskingTensor(32, p=0.5),
-            TimeMaskingTensor(32, p=0.5),
-            TimeMaskingTensor(32, p=0.2)]),
-        test=A.Compose([
-            CropImage(256),
-            InjectTimeNoise(
-                'input/timenoise_v2.pickle', strength=(0.75, 1.0), resize_factor=16, p=0.1),
-            ToTensorV2()]),
-        tta=A.Compose([
-            CropImage(256),
-            ToTensorV2()]),
-    )
+# class Aug05(Ds04prep1):
+#     name = 'aug_05'
+#     transforms = dict(
+#         train=A.Compose([
+#             A.HorizontalFlip(p=0.5),
+#             A.VerticalFlip(p=0.5),
+#             ShiftImage(x_max=0, y_max=180, p=0.5),
+#             MixupChannel(num_segments=20, fix_area=True, p=0.5),
+#             RandomCrop(256),
+#             InjectTimeNoise('input/timenoise_v2.pickle', strength=(0.9, 1.5), resize_factor=16, p=0.4),
+#             RandomAmplify(p=0.5),
+#             DropChannel(p=0.25),
+#             ToTensorV2(),
+#             FrequencyMaskingTensor(18, p=0.5),
+#             FrequencyMaskingTensor(18, p=0.5),
+#             FrequencyMaskingTensor(18, p=0.2),
+#             TimeMaskingTensor(32, p=0.5),
+#             TimeMaskingTensor(32, p=0.5),
+#             TimeMaskingTensor(32, p=0.2)]),
+#         test=A.Compose([
+#             CropImage(256),
+#             InjectTimeNoise(
+#                 'input/timenoise_v2.pickle', strength=(0.75, 1.0), resize_factor=16, p=0.1),
+#             ToTensorV2()]),
+#         tta=A.Compose([
+#             CropImage(256),
+#             ToTensorV2()]),
+#     )
 
 
-class Aug06(Ds04prep1): # local + aug 04
-    name = 'aug_06'
-    dataset_params = dict(
-        preprocess=A.Compose([
-            ToSpectrogram(), AdaptiveResize(16), 
-            NormalizeSpectrogram('mean')
-        ]),
-        match_time=False)
-    transforms = dict(
-        train=A.Compose([
-            A.HorizontalFlip(p=0.5),
-            A.VerticalFlip(p=0.5),
-            ShiftImage(x_max=0, y_max=180, p=0.5),
-            MixupChannel(num_segments=20, fix_area=True, p=0.5),
-            RandomCrop(256),
-            InjectTimeNoise('input/timenoise_v0.pickle', strength=(0.9, 1.5), resize_factor=16, p=0.5),
-            RandomAmplify(p=0.5),
-            NormalizeSpectrogram('mean'),
-            DropChannel(p=0.25),
-            ToTensorV2(),
-            FrequencyMaskingTensor(18, p=0.5),
-            FrequencyMaskingTensor(18, p=0.5),
-            FrequencyMaskingTensor(18, p=0.2),
-            TimeMaskingTensor(32, p=0.5),
-            TimeMaskingTensor(32, p=0.5),
-            TimeMaskingTensor(32, p=0.2)]),
-        test=A.Compose([
-            CropImage(256),
-            NormalizeSpectrogram('mean'),
-            ToTensorV2()]),
-        tta=A.Compose([
-            CropImage(256),
-            NormalizeSpectrogram('mean'),
-            ToTensorV2()]),
-    )
+# class Aug06(Ds04prep1): # local + aug 04
+#     name = 'aug_06'
+#     dataset_params = dict(
+#         preprocess=A.Compose([
+#             ToSpectrogram(), AdaptiveResize(16), 
+#             NormalizeSpectrogram('mean')
+#         ]),
+#         match_time=False)
+#     transforms = dict(
+#         train=A.Compose([
+#             A.HorizontalFlip(p=0.5),
+#             A.VerticalFlip(p=0.5),
+#             ShiftImage(x_max=0, y_max=180, p=0.5),
+#             MixupChannel(num_segments=20, fix_area=True, p=0.5),
+#             RandomCrop(256),
+#             InjectTimeNoise('input/timenoise_v0.pickle', strength=(0.9, 1.5), resize_factor=16, p=0.5),
+#             RandomAmplify(p=0.5),
+#             NormalizeSpectrogram('mean'),
+#             DropChannel(p=0.25),
+#             ToTensorV2(),
+#             FrequencyMaskingTensor(18, p=0.5),
+#             FrequencyMaskingTensor(18, p=0.5),
+#             FrequencyMaskingTensor(18, p=0.2),
+#             TimeMaskingTensor(32, p=0.5),
+#             TimeMaskingTensor(32, p=0.5),
+#             TimeMaskingTensor(32, p=0.2)]),
+#         test=A.Compose([
+#             CropImage(256),
+#             NormalizeSpectrogram('mean'),
+#             ToTensorV2()]),
+#         tta=A.Compose([
+#             CropImage(256),
+#             NormalizeSpectrogram('mean'),
+#             ToTensorV2()]),
+#     )
 
 
 class Model00(Ds06):

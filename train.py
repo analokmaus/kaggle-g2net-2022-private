@@ -15,6 +15,8 @@ import pickle
 import traceback
 import albumentations as A
 from timm.models import convert_sync_batchnorm
+import multiprocessing
+multiprocessing.current_process().authkey = '0'.encode('utf-8')
 
 from kuma_utils.torch import TorchTrainer, TorchLogger
 from kuma_utils.torch.utils import get_time, seed_everything, fit_state_dict
@@ -141,9 +143,13 @@ if __name__ == "__main__":
         test = test.iloc[:1000]
     train = train.loc[train['target'] != -1]
     splitter = cfg.splitter
-    if cfg.depth_bins is None:
+    if splitter.__class__.__name__ == 'StratifiedKFold':
         fold_iter = list(splitter.split(X=train, y=train['target']))
-    else:
+    elif splitter.__class__.__name__ == 'StratifiedGroupKFold':
+        if 'group' not in train.columns:
+            train['group'] = train['id'].apply(lambda x: x.split('_')[0])
+        fold_iter = list(splitter.split(X=train, y=train['target'], groups=train['group']))
+    elif splitter.__class__.__name__ == 'MultilabelStratifiedKFold':
         targets = pd.get_dummies(pd.cut(train['signal_depth'], cfg.depth_bins))
         fold_iter = list(splitter.split(X=train, y=targets))
     with open(export_dir/'folds.pickle', 'wb') as f:
@@ -153,6 +159,9 @@ if __name__ == "__main__":
     Training
     '''
     scores = []
+    manager = multiprocessing.Manager()
+    cache = manager.dict()
+    cache['size'] = 0
     for fold, (train_idx, valid_idx) in enumerate(fold_iter):
         
         if opt.limit_fold >= 0 and fold != opt.limit_fold:
@@ -176,9 +185,12 @@ if __name__ == "__main__":
         train_data = cfg.dataset(
             df=train_fold, data_dir=cfg.train_dir,
             transforms=cfg.transforms['train'], is_test=False, **cfg.dataset_params)
+        train_data.cache = cache
         valid_data = cfg.dataset(
             df=valid_fold, data_dir = cfg.train_dir,
-            transforms=cfg.transforms['test'], is_test=True, **cfg.dataset_params)
+            transforms=cfg.transforms['test'], is_test=True, 
+            **dict(cfg.dataset_params, **{'cache_limit': 0}))
+        valid_data.cache = cache
 
         train_loader = D.DataLoader(
             train_data, batch_size=cfg.batch_size, shuffle=True,
@@ -258,7 +270,8 @@ if __name__ == "__main__":
     outoffolds = np.full((len(train), 1), 0.5, dtype=np.float32)
     test_data = cfg.dataset(
         df=test, data_dir=cfg.test_dir,
-        transforms=cfg.transforms['tta'], is_test=True, **cfg.dataset_params)
+        transforms=cfg.transforms['tta'], is_test=True, 
+        **dict(cfg.dataset_params, **{'cache_limit': 0}))
     test_loader = D.DataLoader(
             test_data, batch_size=cfg.batch_size, shuffle=False, 
             num_workers=opt.num_workers, pin_memory=False)
@@ -277,7 +290,9 @@ if __name__ == "__main__":
         valid_fold = train.iloc[valid_idx]
         valid_data = cfg.dataset(
             df=valid_fold, data_dir = cfg.train_dir,
-            transforms=cfg.transforms['tta'], is_test=True, **cfg.dataset_params)
+            transforms=cfg.transforms['tta'], is_test=True, 
+            **cfg.dataset_params)
+        valid_data.cache = cache
         valid_loader = D.DataLoader(
             valid_data, batch_size=cfg.batch_size, shuffle=False,
             num_workers=opt.num_workers, pin_memory=False)

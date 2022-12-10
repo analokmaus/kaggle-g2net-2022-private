@@ -1,4 +1,5 @@
 import numpy as np
+import os
 import torch
 import torch.utils.data as D
 import matplotlib.pyplot as plt
@@ -283,6 +284,7 @@ class G2Net2022Dataset3(D.Dataset):
         is_test=False,
         preprocess=None,
         transforms=None,
+        cache_limit=0, # in GB
         ):
         self.df = df
         self.data_dir = data_dir
@@ -291,6 +293,8 @@ class G2Net2022Dataset3(D.Dataset):
         self.preprocess = preprocess
         self.transforms = transforms
         self.is_test = is_test
+        self.cache = {'size': 0}
+        self.cache_limit = cache_limit
 
     def __len__(self):
         return len(self.df)
@@ -302,30 +306,41 @@ class G2Net2022Dataset3(D.Dataset):
     def _load_spec(self, index):
         r = self.df.iloc[index]
         target = torch.tensor([r['target']]).float()
-        if 'path' in self.df.columns:
-            fname = r['path']
+        if r['id'] in self.cache.keys():
+            img = self.cache[r['id']]
         else:
-            fname = self.data_dir/f'{r.id}.pickle'
-        with open(fname, 'rb') as f:
-            data = pickle.load(f)[r['id']]
-        spec_h1, time_h1 = data['H1']['SFTs']*1e22, data['H1']['timestamps_GPS']
-        spec_l1, time_l1 = data['L1']['SFTs']*1e22, data['L1']['timestamps_GPS']
+            if 'path' in self.df.columns:
+                fname = r['path']
+            else:
+                fname = self.data_dir/f'{r.id}.pickle'
+            with open(fname, 'rb') as f:
+                data = pickle.load(f)
+                gid = list(data.keys())[0]
+                data = data[gid]
+            spec_h1, time_h1 = data['H1']['SFTs']*1e22, data['H1']['timestamps_GPS']
+            spec_l1, time_l1 = data['L1']['SFTs']*1e22, data['L1']['timestamps_GPS']
 
-        if self.match:
-            _spec = np.full((2, 360, 5760), 0., np.complex64)
-            ref_time = min(time_h1.min(), time_l1.min())
-            frame_h1 = ((time_h1 - ref_time) / 1800).round().astype(np.uint64)
-            frame_l1 = ((time_l1 - ref_time) / 1800).round().astype(np.uint64)
-            _spec[0][:, frame_h1[frame_h1 < 5760]] = spec_h1[:, frame_h1 < 5760]
-            _spec[1][:, frame_l1[frame_l1 < 5760]] = spec_l1[:, frame_l1 < 5760]
-            spec_h1, spec_l1 = _spec[0], _spec[1]
-        else:
-            if spec_h1.shape[1] < spec_l1.shape[1]:
-                spec_l1 = spec_l1[:, :spec_h1.shape[1]]
-            elif spec_h1.shape[1] > spec_l1.shape[1]:
-                spec_h1 = spec_h1[:, :spec_l1.shape[1]]
+            if self.match:
+                _spec = np.full((2, 360, 5760), 0., np.complex64)
+                ref_time = min(time_h1.min(), time_l1.min())
+                frame_h1 = ((time_h1 - ref_time) / 1800).round().astype(np.uint64)
+                frame_l1 = ((time_l1 - ref_time) / 1800).round().astype(np.uint64)
+                _spec[0][:, frame_h1[frame_h1 < 5760]] = spec_h1[:, frame_h1 < 5760]
+                _spec[1][:, frame_l1[frame_l1 < 5760]] = spec_l1[:, frame_l1 < 5760]
+                spec_h1, spec_l1 = _spec[0], _spec[1]
+            else:
+                if spec_h1.shape[1] < spec_l1.shape[1]:
+                    spec_l1 = spec_l1[:, :spec_h1.shape[1]]
+                elif spec_h1.shape[1] > spec_l1.shape[1]:
+                    spec_h1 = spec_h1[:, :spec_l1.shape[1]]
 
-        img = np.stack((spec_h1, spec_l1), axis=2) # (360, t, 2)
+            img = np.stack((spec_h1, spec_l1), axis=2) # (360, t, 2)
+            
+            if self.cache['size'] < self.cache_limit:
+                self.cache[r['id']] = img
+                self.cache['size'] += img.nbytes / (1024 ** 3)
+            else:
+                pass
 
         if self.preprocess:
             img = self.preprocess(image=img)['image']
@@ -349,6 +364,7 @@ class ChrisDataset(D.Dataset):
         is_test=False,
         preprocess=None, # Ignore
         transforms=None,
+        cache_limit=0, # in GB
         ):
         self.df = df
         self.data_dir = data_dir
@@ -358,6 +374,8 @@ class ChrisDataset(D.Dataset):
         self.preprocess = preprocess
         self.transforms = transforms
         self.is_test = is_test
+        self.cache = {'size': 0}
+        self.cache_limit = cache_limit
 
     def __len__(self):
         return len(self.df)
@@ -368,43 +386,51 @@ class ChrisDataset(D.Dataset):
     def _load_spec(self, index):
         r = self.df.iloc[index]
         target = torch.tensor([r['target']]).float()
-        if 'path' in self.df.columns:
-            fname = r['path']
+        if r['id'] in self.cache.keys():
+            img, freq = self.cache[r['id']]
         else:
-            fname = self.data_dir/f'{r.id}.pickle'
-        with open(fname, 'rb') as f:
-            data = pickle.load(f)[r['id']]
-        spec_h1, time_h1 = data['H1']['SFTs']*1e22, data['H1']['timestamps_GPS']
-        spec_l1, time_l1 = data['L1']['SFTs']*1e22, data['L1']['timestamps_GPS']
-        freq = data['frequency_Hz'][0]
+            if 'path' in self.df.columns:
+                fname = r['path']
+            else:
+                fname = self.data_dir/f'{r.id}.pickle'
+            with open(fname, 'rb') as f:
+                data = pickle.load(f)
+                gid = list(data.keys())[0]
+                data = data[gid]
+            spec_h1, time_h1 = data['H1']['SFTs']*1e22, data['H1']['timestamps_GPS']
+            spec_l1, time_l1 = data['L1']['SFTs']*1e22, data['L1']['timestamps_GPS']
+            freq = data['frequency_Hz'][0]
 
-        if self.match:
-            _spec = np.full((2, 360, 5760), 0., np.complex64)
-            ref_time = min(time_h1.min(), time_l1.min())
-            frame_h1 = ((time_h1 - ref_time) / 1800).round().astype(np.uint64)
-            frame_l1 = ((time_l1 - ref_time) / 1800).round().astype(np.uint64)
-            _spec[0][:, frame_h1[frame_h1 < 5760]] = spec_h1[:, frame_h1 < 5760]
-            _spec[1][:, frame_l1[frame_l1 < 5760]] = spec_l1[:, frame_l1 < 5760]
-            spec_h1, spec_l1 = _spec[0], _spec[1]
-        else:
-            if spec_h1.shape[1] < spec_l1.shape[1]:
-                spec_l1 = spec_l1[:, :spec_h1.shape[1]]
-            elif spec_h1.shape[1] > spec_l1.shape[1]:
-                spec_h1 = spec_h1[:, :spec_l1.shape[1]]
+            if self.match:
+                _spec = np.full((2, 360, 5760), 0., np.complex64)
+                ref_time = min(time_h1.min(), time_l1.min())
+                frame_h1 = ((time_h1 - ref_time) / 1800).round().astype(np.uint64)
+                frame_l1 = ((time_l1 - ref_time) / 1800).round().astype(np.uint64)
+                _spec[0][:, frame_h1[frame_h1 < 5760]] = spec_h1[:, frame_h1 < 5760]
+                _spec[1][:, frame_l1[frame_l1 < 5760]] = spec_l1[:, frame_l1 < 5760]
+                spec_h1, spec_l1 = _spec[0], _spec[1]
+            else:
+                if spec_h1.shape[1] < spec_l1.shape[1]:
+                    spec_l1 = spec_l1[:, :spec_h1.shape[1]]
+                elif spec_h1.shape[1] > spec_l1.shape[1]:
+                    spec_h1 = spec_h1[:, :spec_l1.shape[1]]
 
-        # img = np.stack((spec_h1, spec_l1), axis=2) # (360, t, 2)
-        # if self.preprocess:
-        #     img = self.preprocess(image=img)['image']
+            img = np.zeros((360, self.img_size, 2), dtype=np.float32)
+            for ch, spec in enumerate([spec_h1, spec_l1]):
+                across = int(spec.shape[1] / self.img_size)
+                across = min(across, int(self.max_size / self.img_size))
+                spec = spec[:, :(across*self.img_size)].real**2 + spec[:, :(across*self.img_size)].imag**2
+                spec /= np.mean(spec)  # normalize
+                # p = wiener(p, (3, 13))
+                spec = np.mean(spec.reshape(360, self.img_size, across), axis=2)
+                img[:, :, ch] = spec
 
-        img = np.zeros((360, self.img_size, 2), dtype=np.float32)
-        for ch, spec in enumerate([spec_h1, spec_l1]):
-            across = int(spec.shape[1] / self.img_size)
-            across = min(across, int(self.max_size / self.img_size))
-            spec = spec[:, :(across*self.img_size)].real**2 + spec[:, :(across*self.img_size)].imag**2
-            spec /= np.mean(spec)  # normalize
-            # p = wiener(p, (3, 13))
-            spec = np.mean(spec.reshape(360, self.img_size, across), axis=2)
-            img[:, :, ch] = spec
+            if self.cache['size'] < self.cache_limit:
+                self.cache[r['id']] = (img, freq)
+                self.cache['size'] += (img.nbytes) / (1024 ** 3)
+            else:
+                pass
+
         mean0 = img[:, :, 0].mean()
         std0 = img[:, :, 0].std()
         mean1 = img[:, :, 1].mean()
