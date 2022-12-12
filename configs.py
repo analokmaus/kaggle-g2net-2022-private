@@ -479,6 +479,15 @@ class Ds09(Ds06):
     train_dir = None
 
 
+class Ds09val0(Ds09):
+    name = 'ds_09_val0'
+    splitter = StratifiedGroupKFold(n_splits=5, shuffle=True, random_state=Baseline.seed)
+    depth_bins = None
+    parallel = 'ddp'
+    batch_size = 64 # 32 per gpu
+    optimizer_params = dict(lr=1e-3, weight_decay=1e-6)
+
+
 class Ds09mod0(Ds09):
     name = 'ds_09_mod0'
     model = create_RepLKNet31L
@@ -619,10 +628,23 @@ class Ds09prep1(Ds09): # cf. Aug03
     optimizer_params = dict(lr=1e-3, weight_decay=1e-6)
 
 
-class Ds09val0(Ds09mod6):
-    name = 'ds_09_val0'
+class Ds09val1(Ds09mod6):
+    name = 'ds_09_val1'
     splitter = StratifiedGroupKFold(n_splits=5, shuffle=True, random_state=Baseline.seed)
     depth_bins = None
+
+
+class Ds09mod7(Ds09val1):
+    name = 'ds_09_mod7'
+    model_params = dict(
+        model_name='tf_efficientnet_b7_ns',
+        pretrained=True,
+        num_classes=1,
+        timm_params=dict(in_chans=2),
+        custom_preprocess='chris_debias',
+        custom_classifier='gem',
+        custom_attention='triplet'
+    )
 
 
 class Ds10(Ds06):
@@ -823,32 +845,15 @@ class Aug03(Ds09):
     optimizer_params = dict(lr=1e-3, weight_decay=1e-6)
 
 
-# class Aug04(Ds04prep1):
-#     name = 'aug_04'
-#     transforms = dict(
-#         train=A.Compose([
-#             A.HorizontalFlip(p=0.5),
-#             A.VerticalFlip(p=0.5),
-#             ShiftImage(x_max=0, y_max=180, p=0.5),
-#             MixupChannel(num_segments=20, fix_area=True, p=0.5),
-#             RandomCrop(256),
-#             InjectTimeNoise('input/timenoise_v0.pickle', strength=(0.9, 1.5), resize_factor=16, p=0.5),
-#             RandomAmplify(p=0.5),
-#             DropChannel(p=0.25),
-#             ToTensorV2(),
-#             FrequencyMaskingTensor(18, p=0.5),
-#             FrequencyMaskingTensor(18, p=0.5),
-#             FrequencyMaskingTensor(18, p=0.2),
-#             TimeMaskingTensor(32, p=0.5),
-#             TimeMaskingTensor(32, p=0.5),
-#             TimeMaskingTensor(32, p=0.2)]),
-#         test=A.Compose([
-#             CropImage(256),
-#             ToTensorV2()]),
-#         tta=A.Compose([
-#             CropImage(256),
-#             ToTensorV2()]),
-#     )
+class Aug04(Ds09val1):
+    name = 'aug_04'
+    dataset_params = dict(
+        preprocess=A.Compose([
+            ToSpectrogram(), AdaptiveResize(img_size=720), 
+            NormalizeSpectrogram('constant')
+        ]),
+        match_time=False)
+    
 
 
 # class Aug05(Ds04prep1):
@@ -939,5 +944,19 @@ class Mixup01(Ds09):
 
 
 class Mixup02(Ds09):
-    name = 'mixup_03'
+    name = 'mixup_02'
     hook = MixupTrain(lor_label=True)
+
+
+class Mixup03(Ds09val1):
+    name = 'mixup_03'
+    hook = MixupTrain(alpha=4.0, lor_label=True)
+    model_params = dict(
+        model_name='tf_efficientnet_b7_ns',
+        pretrained=True,
+        num_classes=1,
+        timm_params=dict(in_chans=2),
+        custom_preprocess='chris_debias',
+        custom_classifier='gem',
+        custom_attention='mixup' # manifold mixup
+    )

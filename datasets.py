@@ -335,15 +335,15 @@ class G2Net2022Dataset3(D.Dataset):
                     spec_h1 = spec_h1[:, :spec_l1.shape[1]]
 
             img = np.stack((spec_h1, spec_l1), axis=2) # (360, t, 2)
+
+            if self.preprocess:
+                img = self.preprocess(image=img)['image']
             
             if self.cache['size'] < self.cache_limit:
                 self.cache[r['id']] = img
                 self.cache['size'] += img.nbytes / (1024 ** 3)
             else:
                 pass
-
-        if self.preprocess:
-            img = self.preprocess(image=img)['image']
 
         if self.transforms:
             img = self.transforms(image=img)['image']

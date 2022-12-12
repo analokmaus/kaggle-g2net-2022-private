@@ -96,13 +96,15 @@ class C16val0(Chrisv16):
     depth_bins = None
 
 
-class C16aug0(Chrisv16):
+class C16aug0(C16val0):
     name = 'chris_v16_aug0'
     transforms = dict(
         train=A.Compose([
             A.HorizontalFlip(p=0.5),
             A.VerticalFlip(p=0.5),
+            ShiftImage(360, 180, p=0.5),
             DropChannel(p=0.25),
+            ClipSignal(-20, 20),
             ToTensorV2(),
             FrequencyMaskingTensor(24, p=0.5),
             FrequencyMaskingTensor(24, p=0.5),
@@ -110,17 +112,18 @@ class C16aug0(Chrisv16):
             TimeMaskingTensor(72, p=0.5),
             TimeMaskingTensor(72, p=0.5),
             TimeMaskingTensor(72, p=0.5)]),
-        test=A.Compose([ToTensorV2()]),
-        tta=A.Compose([ToTensorV2()]),
+        test=A.Compose([ClipSignal(-20, 20), ToTensorV2()]),
+        tta=A.Compose([ClipSignal(-20, 20), ToTensorV2()]),
     )
 
 
-class C16aug1(Chrisv16):
+class C16aug1(C16val0):
     name = 'chris_v16_aug1'
     transforms = dict(
         train=A.Compose([
             A.HorizontalFlip(p=0.5),
             A.VerticalFlip(p=0.5),
+            ShiftImage(360, 180, p=0.5),
             RandomAmplify(p=0.5),
             ClipSignal(-20, 20),
             DropChannel(p=0.25),

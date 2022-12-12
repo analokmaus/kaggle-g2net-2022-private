@@ -36,7 +36,9 @@ class ToSpectrogram(ImageOnlyTransform):
 class NormalizeSpectrogram(ImageOnlyTransform):
     def __init__(self, method='mean', always_apply=True, p=1.0):
         super().__init__(always_apply, p)
-        assert method in ['mean', 'constant', 'median', 'concat', 'chris']
+        assert method in [
+            'mean', 'constant', 'median', 'concat', 'chris', 
+            'column_wise', 'row_wise', 'column_row_wise']
         self.method = method
 
     def apply(self, img: np.ndarray, **params): # img: (freq, t, ch)
@@ -57,8 +59,25 @@ class NormalizeSpectrogram(ImageOnlyTransform):
         elif self.method == 'chris':
             for ch in range(img.shape[2]):
                 img[:, :, ch] /= img[:, :, ch].mean() 
-                img[:, :, ch] -= img[:, :, ch].mean()
-                img[:, :, ch] /= img[:, :, ch].std()
+            img -= img.mean()
+            img /= img.std()
+        elif self.method == 'column_wise':
+            for ch in range(img.shape[2]):
+                img[:, :, ch] /= img[:, :, ch].mean() 
+                img[:, :, ch] -= img[:, :, ch].mean(axis=0)[None, :]
+                img[:, :, ch] /= img[:, :, ch].std(axis=0)[None, :]
+        elif self.method == 'row_wise':
+            for ch in range(img.shape[2]):
+                img[:, :, ch] /= img[:, :, ch].mean() 
+                img[:, :, ch] -= img[:, :, ch].mean(axis=1)[:, None]
+                img[:, :, ch] /= img[:, :, ch].std(axis=1)[:, None]
+        elif self.method == 'column_row_wise':
+            for ch in range(img.shape[2]):
+                img[:, :, ch] /= img[:, :, ch].mean() 
+                img[:, :, ch] -= img[:, :, ch].mean(axis=0)[None, :]
+                img[:, :, ch] /= img[:, :, ch].std(axis=0)[None, :]
+                img[:, :, ch] -= img[:, :, ch].mean(axis=1)[:, None]
+                img[:, :, ch] /= img[:, :, ch].std(axis=1)[:, None]
         return img
 
     def get_transform_init_args_names(self):
