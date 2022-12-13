@@ -22,6 +22,7 @@ F1_MIN, F1_MAX = -12, -8
 DP_MIN, DP_MID, DP_MAX = 25, 25, 50
 C_SQRSX = 26.5
 ARTIFACT_NSIGMA = 6
+INJECT_ARTIFACT = True
 TEST_DIR = Path('input/g2net-detecting-continuous-gravitational-waves/test/')
 TEST_PATH = Path('input/g2net-detecting-continuous-gravitational-waves/sample_submission.csv')
 EXPORT_DIR = Path(f'input/g2net-detecting-continuous-gravitational-waves/{DATASET}/')
@@ -259,15 +260,15 @@ if __name__ == '__main__':
     # generate samples
     with Pool(NUM_WORKERS) as p:
         metadata_neg = p.map(
-            partial(generate_sample, test=test_pos, target='negative'), 
+            partial(generate_sample, test=test_pos, target='negative', artifact=INJECT_ARTIFACT), 
             range(len(test)))
     with Pool(NUM_WORKERS) as p:
         metadata_weak = p.map(
-            partial(generate_sample, test=test_neg, target='weak'), 
+            partial(generate_sample, test=test_neg, target='weak', artifact=INJECT_ARTIFACT), 
             range(len(test)))
     # with Pool(NUM_WORKERS) as p:
     #     metadata_strong = p.map(
-    #         partial(generate_sample, test=test, target='strong'), 
+    #         partial(generate_sample, test=test, target='strong', artifact=INJECT_ARTIFACT), 
     #         range(len(test)))
     metadata = metadata_neg + metadata_weak
     pd.DataFrame(metadata).dropna(subset='id').reset_index(drop=True).to_csv(
