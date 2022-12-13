@@ -143,6 +143,7 @@ def make_data(gid, num_buckets=128, target='negative', inject_artifact=False):
     
     if target == 'negative':
         signal_depth = 1000
+        signal_kwargs = {}
         freqs_h1, times_h1, sft_data_h1 = get_sft_as_arrays(";".join(sorted(sft_paths_h1)))
         freqs_l1, times_l1, sft_data_l1 = get_sft_as_arrays(";".join(sorted(sft_paths_l1)))
     else:
@@ -243,9 +244,9 @@ def generate_sample(index, test, target, artifact):
         sft_l1 = results[fname]['L1']['SFTs'] * 1e22
         results2['H1']['spectrogram'] = (sft_h1.real ** 2 + sft_h1.imag ** 2).astype(np.float16)
         results2['L1']['spectrogram'] = (sft_l1.real ** 2 + sft_l1.imag ** 2).astype(np.float16)
-        results2['H1']['timestamps'] = results['H1']['timestamps_GPS']
-        results2['L1']['timestamps'] = results['L1']['timestamps_GPS']
-        results2['frequency'] = results['frequency_Hz']
+        results2['H1']['timestamps'] = results[fname]['H1']['timestamps_GPS']
+        results2['L1']['timestamps'] = results[fname]['L1']['timestamps_GPS']
+        results2['frequency'] = results[fname]['frequency_Hz']
         pickle.dump(results2, f)
     for k, v in signal_info.items():
         if k in ['F0', 'F1', 'F2', 'Alpha', 'Delta', 'cosi', 'psi', 'phi']:
@@ -254,22 +255,22 @@ def generate_sample(index, test, target, artifact):
 
 
 if __name__ == '__main__':
-    test = pd.read_csv(TEST_PATH).head(120)
+    test = pd.read_csv(TEST_PATH)
     test_neg = test.sample(frac=1/3, random_state=2022)
     test_pos = test.drop(test_neg.index)
     # generate samples
     with Pool(NUM_WORKERS) as p:
         metadata_neg = p.map(
-            partial(generate_sample, test=test_pos, target='negative', artifact=INJECT_ARTIFACT), 
-            range(len(test)))
+            partial(generate_sample, test=test_neg, target='negative', artifact=INJECT_ARTIFACT), 
+            range(len(test_neg)))
     with Pool(NUM_WORKERS) as p:
         metadata_weak = p.map(
-            partial(generate_sample, test=test_neg, target='weak', artifact=INJECT_ARTIFACT), 
-            range(len(test)))
-    # with Pool(NUM_WORKERS) as p:
-    #     metadata_strong = p.map(
-    #         partial(generate_sample, test=test, target='strong', artifact=INJECT_ARTIFACT), 
-    #         range(len(test)))
+            partial(generate_sample, test=test_pos, target='weak', artifact=INJECT_ARTIFACT), 
+            range(len(test_pos)))
+    # # with Pool(NUM_WORKERS) as p:
+    # #     metadata_strong = p.map(
+    # #         partial(generate_sample, test=test, target='strong', artifact=INJECT_ARTIFACT), 
+    # #         range(len(test)))
     metadata = metadata_neg + metadata_weak
     pd.DataFrame(metadata).dropna(subset='id').reset_index(drop=True).to_csv(
         f'input/g2net-detecting-continuous-gravitational-waves/{DATASET}.csv', index=False)
