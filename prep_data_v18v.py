@@ -25,7 +25,9 @@ ARTIFACT_NSIGMA = 6
 TEST_DIR = Path('input/g2net-detecting-continuous-gravitational-waves/test/')
 TEST_PATH = Path('input/g2net-detecting-continuous-gravitational-waves/sample_submission.csv')
 EXPORT_DIR = Path(f'input/g2net-detecting-continuous-gravitational-waves/{DATASET}/')
+EXPORT_DIR2 = Path(f'input/g2net-detecting-continuous-gravitational-waves/{DATASET}_lite/')
 EXPORT_DIR.mkdir(exist_ok=True)
+EXPORT_DIR2.mkdir(exist_ok=True)
 
 
 class NoPrint:
@@ -224,6 +226,7 @@ def generate_sample(index, test, target, artifact):
     np.random.RandomState(index)
     np.random.seed(index)
     test_id = test['id'].values[index]
+    fname = f'{test_id}_{target}'
     try:
         results, metadata, signal_info = make_data(test_id, NUM_BUCKETS, target, artifact)
     except Exception as e:
@@ -233,6 +236,16 @@ def generate_sample(index, test, target, artifact):
     instance_id = metadata['id']
     with open(EXPORT_DIR/f'{instance_id}.pickle', 'wb') as f:
         pickle.dump(results, f)
+    with open(EXPORT_DIR2/f'{instance_id}.pickle', 'wb') as f:
+        results2 = {'H1': {}, 'L1': {}}
+        sft_h1 = results[fname]['H1']['SFTs'] * 1e22
+        sft_l1 = results[fname]['L1']['SFTs'] * 1e22
+        results2['H1']['spectrogram'] = (sft_h1.real ** 2 + sft_h1.imag ** 2).astype(np.float16)
+        results2['L1']['spectrogram'] = (sft_l1.real ** 2 + sft_l1.imag ** 2).astype(np.float16)
+        results2['H1']['timestamps'] = results['H1']['timestamps_GPS']
+        results2['L1']['timestamps'] = results['L1']['timestamps_GPS']
+        results2['frequency'] = results['frequency_Hz']
+        pickle.dump(results2, f)
     for k, v in signal_info.items():
         if k in ['F0', 'F1', 'F2', 'Alpha', 'Delta', 'cosi', 'psi', 'phi']:
             metadata[k] = v
@@ -240,7 +253,7 @@ def generate_sample(index, test, target, artifact):
 
 
 if __name__ == '__main__':
-    test = pd.read_csv(TEST_PATH)
+    test = pd.read_csv(TEST_PATH).head(120)
     test_neg = test.sample(frac=1/3, random_state=2022)
     test_pos = test.drop(test_neg.index)
     # generate samples
