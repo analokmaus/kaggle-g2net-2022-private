@@ -136,7 +136,7 @@ class SimpleCNN(nn.Module):
             spec = self.norm(spec)
         
         if self.mixup_mode == 'manifold':
-            self.cnn[3][1].update(lam, idx)
+            self.cnn[2].update(lam, idx)
 
         if self.return_spec and lam is not None:
             return self.cnn(spec), spec, lam

@@ -41,9 +41,13 @@ def inference(data_loader, tta=False, drop_anomaly=False):
             specs = inputs[0]
 
         if drop_anomaly:
-            for i in range(specs.shape[0]): 
-                if specs[i].max() > 2.0:
-                    specs[i, torch.argmax(torch.amax(specs[i], dim=(1,2)))] = 0 # drop single image with anomaly
+            for i in range(specs.shape[0]):  
+                specs_std = specs[i].std(dim=(1, 2))
+                specs_min = specs[i].amin(dim=(1, 2))
+                specs_max = specs[i].amax(dim=(1, 2))
+                peak_sigma = (specs_max - specs_min) / specs_std
+                if peak_sigma.amax() > 25.0:
+                    specs[i, torch.argmax(peak_sigma)] = 0 # drop single image with anomaly
                     drop_flag.append(1)
                 else:
                     drop_flag.append(0)
