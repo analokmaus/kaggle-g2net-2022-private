@@ -33,6 +33,8 @@ class Chrisv16:
     seed = 2021
     train_path = Path('input/g2net-detecting-continuous-gravitational-waves/concat_v13_v14_v15.csv')
     train_dir = None
+    valid_path = Path('input/g2net-detecting-continuous-gravitational-waves/v18v.csv')
+    valid_dir = None
     test_path = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/sample_submission.csv'
     test_dir = INPUT_DIR/'g2net-detecting-continuous-gravitational-waves/test'
     cv = 5

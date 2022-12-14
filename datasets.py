@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import os
 import torch
 import torch.utils.data as D
@@ -444,3 +445,134 @@ class ChrisDataset(D.Dataset):
         return img, torch.FloatTensor([freq]), \
             torch.FloatTensor([mean0]), torch.FloatTensor([std0]), \
                 torch.FloatTensor([mean1]), torch.FloatTensor([std1]), target
+
+
+class G2Net2022Dataset8(D.Dataset):
+    '''
+    Infinite training set
+    '''
+    def __init__(
+        self, 
+        df, 
+        data_dir=None,
+        signal_path=None,
+        signal_dir=None,
+        positive_p=0.66,
+        match_time=False,
+        fillna=False,
+        is_test=False,
+        preprocess=None,
+        transforms=None,
+        return_mask=None,
+        random_state=0,
+        cache_limit=0, # in GB
+        ):
+        self.df = df
+        self.signal_df = pd.read_csv(signal_path)
+        self.data_dir = data_dir
+        self.signal_dir = signal_dir
+        self.positive_p = positive_p
+        self.match = match_time
+        self.fillna = fillna
+        self.preprocess = preprocess
+        self.transforms = transforms
+        self.is_test = is_test
+        self.cache = {'size': 0}
+        self.cache_limit = cache_limit
+        self.return_mask = return_mask
+        np.random.RandomState(random_state)
+        np.random.seed(random_state)
+
+    def __len__(self):
+        return len(self.df)
+    
+    def __getitem__(self, index):
+        return self._load_noise_and_signal(index)
+
+    def _load_noise_and_signal(self, index):
+        r = self.df.iloc[index]
+        if r['id'] in self.cache.keys():
+            img, freq, frame_h1, frame_l1 = self.cache[r['id']]
+        else:
+            if 'path' in self.df.columns:
+                fname = r['path']
+            else:
+                fname = self.data_dir/f'{r.id}.pickle'
+            with open(fname, 'rb') as f:
+                data = pickle.load(f)
+                gid = list(data.keys())[0]
+                data = data[gid]
+            spec_h1, time_h1 = data['H1']['SFTs']*1e22, data['H1']['timestamps_GPS']
+            spec_l1, time_l1 = data['L1']['SFTs']*1e22, data['L1']['timestamps_GPS']
+            freq = data['frequency_Hz'].mean()
+
+            ref_time = min(time_h1.min(), time_l1.min())
+            frame_h1 = ((time_h1 - ref_time) / 1800).round().astype(np.uint64)
+            frame_l1 = ((time_l1 - ref_time) / 1800).round().astype(np.uint64)
+
+            if self.match:
+                _spec = np.full((2, 360, 5760), 0., np.complex64)
+                _spec[0][:, frame_h1[frame_h1 < 5760]] = spec_h1[:, frame_h1 < 5760]
+                _spec[1][:, frame_l1[frame_l1 < 5760]] = spec_l1[:, frame_l1 < 5760]
+                spec_h1, spec_l1 = _spec[0], _spec[1]
+            else:
+                if spec_h1.shape[1] < spec_l1.shape[1]:
+                    frame_l1 = frame_l1[:spec_h1.shape[1]]
+                    spec_l1 = spec_l1[:, :spec_h1.shape[1]]
+                elif spec_h1.shape[1] > spec_l1.shape[1]:
+                    frame_h1 = frame_h1[:spec_l1.shape[1]]
+                    spec_h1 = spec_h1[:, :spec_l1.shape[1]]
+
+            img = np.stack((spec_h1, spec_l1), axis=2) # (360, t, 2)
+            img = img.real ** 2 + img.imag ** 2
+
+            if self.cache['size'] < self.cache_limit:
+                self.cache[r['id']] = (img, freq, frame_h1, frame_l1)
+                self.cache['size'] += img.nbytes / (1024 ** 3)
+            else:
+                pass
+
+        if (np.random.random() < self.positive_p) and not self.is_test: # inject signal
+            cand_signal = self.signal_df.query(f'{freq-50} <= F0 <= {freq+50}').sample()
+            sid = cand_signal['id'].values[0]
+            with open(self.signal_dir/f'{sid}.pickle', 'rb') as f:
+                data = pickle.load(f)
+            sft_s, _ = data['sft']*1e22, data['timestamps']
+            spec_s = sft_s.real ** 2 + sft_s.imag ** 2
+            shift_y = np.random.randint(-110, 110)
+            spec_s = np.roll(spec_s, shift_y, axis=0)
+            # img[:, :, :] = 0
+
+            if self.match:
+                img[:, frame_h1[frame_h1 < 5760], 0] += spec_s[:360, frame_h1[frame_h1 < 5760]]
+                img[:, frame_l1[frame_l1 < 5760], 1] += spec_s[:360, frame_l1[frame_l1 < 5760]]
+            else:
+                img[:, :, 0] += spec_s[:360, frame_h1]
+                img[:, :, 1] += spec_s[:360, frame_l1]
+            target = torch.tensor([1]).float()
+        else:
+            spec_s = np.zeros_like(img, dtype=np.float32)
+            target = torch.tensor([r['target']]).float()
+
+        if self.preprocess:
+            if self.return_mask:
+                t = self.preprocess(image=img, mask=spec_s[:360, frame_h1, None])
+                img = t['image']
+                mask = t['mask']
+            else:
+                t = self.preprocess(image=img)
+                img = t['image']
+        
+        if self.transforms:
+            if self.return_mask:
+                t = self.transforms(image=img, mask=mask)
+                img = t['image']
+                mask = t['mask']
+            else:
+                t = self.transforms(image=img)
+                img = t['image']
+
+        if self.return_mask:
+            return img, mask, target
+        else:
+            return img, target

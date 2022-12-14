@@ -14,9 +14,9 @@ import os
 import shutil
 
 
-DATASET = 'v18v'
+DATASET = 'v18n2'
 NUM_WORKERS = 40
-NUM_BUCKETS = 180
+NUM_BUCKETS = 256
 REF_SX = 5e-24
 F1_MIN, F1_MAX = -12, -8
 DP_MIN, DP_MID, DP_MAX = 25, 25, 50
@@ -26,9 +26,7 @@ INJECT_ARTIFACT = True
 TEST_DIR = Path('input/g2net-detecting-continuous-gravitational-waves/test/')
 TEST_PATH = Path('input/g2net-detecting-continuous-gravitational-waves/sample_submission.csv')
 EXPORT_DIR = Path(f'input/g2net-detecting-continuous-gravitational-waves/{DATASET}/')
-EXPORT_DIR2 = Path(f'input/g2net-detecting-continuous-gravitational-waves/{DATASET}_lite/')
 EXPORT_DIR.mkdir(exist_ok=True)
-EXPORT_DIR2.mkdir(exist_ok=True)
 
 
 class NoPrint:
@@ -238,16 +236,6 @@ def generate_sample(index, test, target, artifact):
     instance_id = metadata['id']
     with open(EXPORT_DIR/f'{instance_id}.pickle', 'wb') as f:
         pickle.dump(results, f)
-    with open(EXPORT_DIR2/f'{instance_id}.pickle', 'wb') as f:
-        results2 = {'H1': {}, 'L1': {}}
-        sft_h1 = results[fname]['H1']['SFTs'] * 1e22
-        sft_l1 = results[fname]['L1']['SFTs'] * 1e22
-        results2['H1']['spectrogram'] = (sft_h1.real ** 2 + sft_h1.imag ** 2).astype(np.float16)
-        results2['L1']['spectrogram'] = (sft_l1.real ** 2 + sft_l1.imag ** 2).astype(np.float16)
-        results2['H1']['timestamps'] = results[fname]['H1']['timestamps_GPS']
-        results2['L1']['timestamps'] = results[fname]['L1']['timestamps_GPS']
-        results2['frequency'] = results[fname]['frequency_Hz']
-        pickle.dump(results2, f)
     for k, v in signal_info.items():
         if k in ['F0', 'F1', 'F2', 'Alpha', 'Delta', 'cosi', 'psi', 'phi']:
             metadata[k] = v
@@ -256,21 +244,19 @@ def generate_sample(index, test, target, artifact):
 
 if __name__ == '__main__':
     test = pd.read_csv(TEST_PATH)
-    test_neg = test.sample(frac=1/3, random_state=2022)
-    test_pos = test.drop(test_neg.index)
     # generate samples
     with Pool(NUM_WORKERS) as p:
         metadata_neg = p.map(
-            partial(generate_sample, test=test_neg, target='negative', artifact=INJECT_ARTIFACT), 
-            range(len(test_neg)))
-    with Pool(NUM_WORKERS) as p:
-        metadata_weak = p.map(
-            partial(generate_sample, test=test_pos, target='weak', artifact=INJECT_ARTIFACT), 
-            range(len(test_pos)))
+            partial(generate_sample, test=test, target='negative', artifact=INJECT_ARTIFACT), 
+            range(len(test)))
+    # with Pool(NUM_WORKERS) as p:
+    #     metadata_weak = p.map(
+    #         partial(generate_sample, test=test_pos, target='weak', artifact=INJECT_ARTIFACT), 
+    #         range(len(test_pos)))
     # # with Pool(NUM_WORKERS) as p:
     # #     metadata_strong = p.map(
     # #         partial(generate_sample, test=test, target='strong', artifact=INJECT_ARTIFACT), 
     # #         range(len(test)))
-    metadata = metadata_neg + metadata_weak
+    metadata = metadata_neg
     pd.DataFrame(metadata).dropna(subset='id').reset_index(drop=True).to_csv(
         f'input/g2net-detecting-continuous-gravitational-waves/{DATASET}.csv', index=False)

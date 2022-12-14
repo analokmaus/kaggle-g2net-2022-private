@@ -84,7 +84,7 @@ class NormalizeSpectrogram(ImageOnlyTransform):
         return {'method': self.method}
     
 
-class AdaptiveResize(ImageOnlyTransform):
+class AdaptiveResize(DualTransform):
     def __init__(self, resize_factor=16, img_size=None, method='mean', always_apply=True, p=1.0):
         super().__init__(always_apply, p)
         self.resize_f = resize_factor
@@ -102,6 +102,15 @@ class AdaptiveResize(ImageOnlyTransform):
         else:
             img_size = self.img_size
         return adaptive_resize(img, img_size, self.resize_func)
+
+    def apply_to_mask(self, img: np.ndarray, **params):
+        if self.img_size is None:
+            img_size = img.shape[1] // self.resize_f
+        else:
+            img_size = self.img_size
+        img = adaptive_resize(img, img_size, self.resize_func)
+        img = (img - img.min()) / (img.max() - img.min())
+        return (img > 0.1).astype(np.float32)
 
     def get_transform_init_args_names(self):
         return {'resize_f': self.resize_f, 'img_size': self.img_size, 'method': self.method}
@@ -438,6 +447,24 @@ class InjectAnomaly(ImageOnlyTransform):
 
     def get_transform_init_args_names(self):
         return {'anomaly_file': self.anomaly_file, 'detector': self.detector}
+
+
+class RemoveAnomaly(ImageOnlyTransform):
+    def __init__(self, n_sigma=25, always_apply=True, p=1.0):
+        super().__init__(always_apply, p)
+        self.n_sigma = n_sigma
+    
+    def apply(self, img: torch.Tensor, **params): # img: (ch, freq, t)
+        specs_std = img.std(dim=(1, 2))
+        specs_min = img.amin(dim=(1, 2))
+        specs_max = img.amax(dim=(1, 2))
+        peak_sigma = (specs_max - specs_min) / specs_std
+        if peak_sigma.amax() > 25.0:
+            img[torch.argmax(peak_sigma)] = 0 # drop single image with anomaly
+        return img
+
+    def get_transform_init_args_names(self):
+        return {'n_sigma': self.n_sigma}
 
 
 '''
