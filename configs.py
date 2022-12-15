@@ -16,7 +16,7 @@ from datasets import *
 from architectures import *
 from replknet import *
 from models1d_pytorch import *
-from loss_functions import BCEWithLogitsLoss, FocalLoss
+from loss_functions import *
 from metrics import AUC
 from transforms import *
 from iterstrat.ml_stratifiers import MultilabelStratifiedKFold
@@ -477,11 +477,63 @@ class Ds16(Ds15): # signal based sampling
         noise_mixup_p=0,
         noise_path=Path('input/g2net-detecting-continuous-gravitational-waves/concat_v18n1_v18n2.csv'),
         noise_dir=None,)
-    num_epochs = 50
+    num_epochs = 40
     callbacks = [
         EarlyStopping(patience=20, maximize=True, skip_epoch=10),
         SaveSnapshot()
     ]
+
+
+class Ds16aug0(Ds16):
+    name = 'ds_16_aug0'
+    dataset_params = dict(
+        preprocess=A.Compose([
+            AdaptiveResize(img_size=720), NormalizeSpectrogram('chris')]),
+        match_time=False,
+        return_mask=False,
+        positive_p=2/3,
+        signal_amplifier=1.0,
+        shift_range=(-165, 165),
+        noise_mixup_p=0,
+        noise_path=Path('input/g2net-detecting-continuous-gravitational-waves/concat_v18n1_v18n2.csv'),
+        noise_dir=None,)
+
+
+class Ds16aug1(Ds16):
+    name = 'ds_16_aug1'
+    dataset_params = dict(
+        preprocess=A.Compose([
+            AdaptiveResize(img_size=720), NormalizeSpectrogram('chris')]),
+        match_time=False,
+        return_mask=False,
+        positive_p=2/3,
+        signal_amplifier=1.0,
+        shift_range=(-165, 165),
+        noise_mixup_p=0.25,
+        noise_path=Path('input/g2net-detecting-continuous-gravitational-waves/concat_v18n1_v18n2.csv'),
+        noise_dir=None,)
+
+
+class Ds16aug2(Ds16):
+    name = 'ds_16_aug2'
+    dataset_params = dict(
+        preprocess=A.Compose([
+            AdaptiveResize(img_size=256), NormalizeSpectrogram('constant')]),
+        match_time=False,
+        return_mask=False,
+        positive_p=2/3,
+        signal_amplifier=1.0,
+        shift_range=(-165, 165),
+        noise_mixup_p=0.25,
+        noise_path=Path('input/g2net-detecting-continuous-gravitational-waves/concat_v18n1_v18n2.csv'),
+        noise_dir=None,)
+    model = ClassificationModel
+    model_params = dict(
+        classification_model='tf_efficientnet_b7_ns',
+        in_chans=2,
+        num_classes=1,
+        custom_classifier='avg',
+    )
     
 
 class Aug04(Ds09val1):
@@ -516,4 +568,50 @@ class Mixup03(Ds09val1):
         custom_preprocess='chris_debias',
         custom_classifier='gem',
         custom_attention='mixup' # manifold mixup
+    )
+
+
+class Model01(Ds16aug0):
+    name = 'model_01'
+    dataset_params = dict(
+        preprocess=A.Compose([
+            AdaptiveResize(img_size=640), NormalizeSpectrogram('chris'), Crop352()]),
+        match_time=False,
+        return_mask=True,
+        positive_p=2/3,
+        signal_amplifier=1.0,
+        shift_range=(-165, 165),
+        noise_mixup_p=0,
+        noise_path=Path('input/g2net-detecting-continuous-gravitational-waves/concat_v18n1_v18n2.csv'),
+        noise_dir=None,)
+    model = SegmentationAndClassification
+    model_params = dict(
+        segmentation_model='timm-efficientnet-b7',
+        classification_model='tf_efficientnet_b0_ns',
+        in_chans=2,
+        num_classes=1,
+        custom_preprocess='chris_debias',
+        custom_classifier='avg',
+        return_mask=True
+    )
+    hook = SegAndClsTrain()
+    criterion = BCEWithLogitsAux(weight=(0.6, 0.4))
+    transforms = dict(
+        train=A.Compose([
+            A.HorizontalFlip(p=0.5),
+            A.VerticalFlip(p=0.5),
+            RandomAmplify(p=0.25),
+            DropChannel(p=0.25),
+            ToTensorV2(transpose_mask=True),
+            RemoveAnomaly(),
+            FrequencyMaskingTensor(24, p=0.5),
+            FrequencyMaskingTensor(24, p=0.5),
+            FrequencyMaskingTensor(24, p=0.5),
+            TimeMaskingTensor(96, p=0.5),
+            TimeMaskingTensor(96, p=0.5),
+            TimeMaskingTensor(96, p=0.5),]),
+        test=A.Compose([
+            ToTensorV2(transpose_mask=True), RemoveAnomaly()]),
+        tta=A.Compose([
+            ToTensorV2(transpose_mask=True), RemoveAnomaly()]),
     )

@@ -616,6 +616,7 @@ class G2Net2022Dataset88(D.Dataset):
         match_time=False,
         fillna=False,
         is_test=False,
+        shift_range=(-110, 110),
         preprocess=None,
         transforms=None,
         return_mask=None,
@@ -631,6 +632,7 @@ class G2Net2022Dataset88(D.Dataset):
         self.signal_amp = signal_amplifier
         self.match = match_time
         self.fillna = fillna
+        self.shift_range = shift_range
         self.preprocess = preprocess
         self.transforms = transforms
         self.is_test = is_test
@@ -699,8 +701,12 @@ class G2Net2022Dataset88(D.Dataset):
             data = pickle.load(f)
         sft_s, _ = data['sft']*1e22, data['timestamps']
         spec_s = sft_s.real ** 2 + sft_s.imag ** 2
-        shift_y = np.random.randint(-110, 110)
+        shift_y = np.random.randint(*self.shift_range)
         spec_s = np.roll(spec_s, shift_y, axis=0)
+        if shift_y > 0:
+            spec_s[:shift_y, :] = 0
+        else:
+            spec_s[shift_y:, :] = 0
         spec_s *= self.signal_amp
         return spec_s
 
@@ -711,7 +717,7 @@ class G2Net2022Dataset88(D.Dataset):
             noise[:, frame_l1[frame_l1 < 5760], 1] += signal[:360, frame_l1[frame_l1 < 5760]]
             signal_mask = np.zeros((noise.shape[0], noise.shape[1]), dtype=np.float32)
             if self.return_mask:
-                signal_bin = ((signal - signal.min()) / (signal.max() - signal.min()) > 0.1).astype(np.float32)   
+                signal_bin = ((signal - signal.min()) / (signal.max() - signal.min()) > 0.25).astype(np.float32)   
                 signal_mask[:, frame_h1[frame_h1 < 5760]] = signal_bin[:360, frame_h1[frame_h1 < 5760]]
                 signal_mask[:, frame_l1[frame_l1 < 5760]] = signal_bin[:360, frame_l1[frame_l1 < 5760]]
         else:
@@ -719,7 +725,7 @@ class G2Net2022Dataset88(D.Dataset):
             noise[:, :, 1] += signal[:360, frame_l1]
             signal_mask = np.zeros((noise.shape[0], noise.shape[1]), dtype=np.float32)
             if self.return_mask:
-                signal_bin = ((signal - signal.min()) / (signal.max() - signal.min()) > 0.1).astype(np.float32)   
+                signal_bin = ((signal - signal.min()) / (signal.max() - signal.min()) > 0.25).astype(np.float32)   
                 signal_mask[:, :] = signal_bin[:, frame_h1]
                 signal_mask[:, :] = signal_bin[:, frame_l1]
         return noise, signal_mask[:, :, None]
@@ -753,7 +759,19 @@ class G2Net2022Dataset88(D.Dataset):
                 target = torch.tensor([1]).float()
             else:
                 noise_r = self.noise_df.sample().iloc[0]
-                img, _, frame_h1, frame_l1 = self._load_noise(noise_r)
+                noise_freq = noise_r['freq']
+                nearby_noises = self.noise_df.query(f'{noise_freq-50} <= freq <= {noise_freq+50}')
+                noise_spec, _, frame_h1, frame_l1 = self._load_noise(noise_r)
+
+                if np.random.random() < self.noise_mixup_p: # mixup noise
+                    noise_r2 = nearby_noises.sample().iloc[0]
+                    noise_spec2, _, _, _ = self._load_noise(noise_r2) # TODO: how to mixup timestamps?
+                    if noise_spec2.shape[1] > noise_spec.shape[1]:
+                        noise_spec = noise_spec / 2 + noise_spec2[:, :noise_spec.shape[1], :] / 2
+                    else:
+                        noise_spec[:, :noise_spec2.shape[1], :] -= (noise_spec[:, :noise_spec2.shape[1], :] / 2 - noise_spec2 / 2)
+                
+                img = noise_spec
                 signal_mask = np.zeros((img.shape[0], img.shape[1], 1), dtype=np.float32)
                 target = torch.tensor([0]).float()
 

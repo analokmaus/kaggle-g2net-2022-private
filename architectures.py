@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import timm
 
+import segmentation_models_pytorch as smp
 from modules import *
 
 from kuma_utils.torch.modules import AdaptiveConcatPool2d, GeM, AdaptiveGeM
@@ -148,4 +149,167 @@ class SimpleCNN(nn.Module):
             return self.cnn(spec), lam
         else:
             return self.cnn(spec)
-    
+
+
+class ClassificationModel(nn.Module):
+
+    def __init__(self,
+                 classification_model='resnet18',
+                 classification_params={},
+                 in_chans=2,
+                 num_classes=1,
+                 custom_preprocess='none',
+                 custom_classifier='none',
+                 custom_attention='none', 
+                 dropout=0,
+                 pretrained=False):
+
+        super().__init__()
+
+        if custom_preprocess == 'chris_debias':
+            self.preprocess = nn.Sequential(
+                nn.Conv2d(2, 64, kernel_size=(3,31), stride=(1,2), padding=(3//2,31//2)),
+                nn.GELU(),
+                nn.Conv2d(64, 128, kernel_size=(5,5), stride=(1,2), padding=(5//2,5//2)),
+                nn.GELU(),
+            )
+            cls_in_chans = 128
+        else:
+            self.preprocess = nn.Identity()
+            cls_in_chans = in_chans
+
+        self.classification_model = timm.create_model(
+            classification_model,
+            pretrained=pretrained,
+            in_chans=cls_in_chans,
+            num_classes=num_classes,
+            **classification_params
+        )
+        feature_dim = self.classification_model.get_classifier().in_features
+        self.classification_model.reset_classifier(0, '')
+
+        if custom_attention == 'triplet':
+            self.attention = TripletAttention()
+        else:
+            self.attention = nn.Identity()
+
+        if custom_classifier == 'avg':
+            self.global_pool = nn.AdaptiveAvgPool2d((1, 1))
+        elif custom_classifier == 'max':
+            self.global_pool = nn.AdaptiveMaxPool2d((1, 1))
+        elif custom_classifier == 'concat':
+            self.global_pool = AdaptiveConcatPool2d()
+            feature_dim = feature_dim * 2
+        elif custom_classifier == 'gem':
+            self.global_pool = GeM(p=3, eps=1e-4)
+        else:
+            self.global_pool = nn.AdaptiveAvgPool2d((1, 1))
+
+        self.head = nn.Sequential(
+            Flatten(),
+            nn.Linear(feature_dim, 512), 
+            nn.Dropout(dropout) if dropout > 0 else nn.Identity(),
+            nn.ReLU(inplace=True), 
+            nn.Linear(512, num_classes))
+
+    def forward(self, x):
+        output = self.classification_model(self.preprocess(x))
+        output = self.attention(output)
+        output = self.global_pool(output)
+        output = self.head(output)
+        return output
+
+
+class SegmentationAndClassification(nn.Module):
+
+    def __init__(self,
+                 segmentation_model='se_resnext50_32x4d',
+                 segmentation_params={},
+                 classification_model='resnet18',
+                 classification_params={},
+                 in_chans=2,
+                 num_classes=1,
+                 custom_preprocess='none',
+                 custom_classifier='none',
+                 custom_attention='none', 
+                 dropout=0,
+                 pretrained=False,
+                 return_mask=False,
+                 concat_original=False):
+
+        super().__init__()
+        self.return_mask = return_mask
+        self.concat = concat_original
+
+        if custom_preprocess == 'chris_debias':
+            self.preprocess = nn.Sequential(
+                nn.Conv2d(2, 64, kernel_size=(3,31), stride=(1,2), padding=(3//2,31//2)),
+                nn.GELU(),
+                nn.Conv2d(64, 128, kernel_size=(5,5), stride=(1,2), padding=(5//2,5//2)),
+                nn.GELU(),
+            )
+            seg_in_chans = 128
+        else:
+            self.preprocess = nn.Identity()
+            seg_in_chans = in_chans
+
+        self.segmentation_model = smp.Unet(
+            encoder_name=segmentation_model,
+            encoder_weights="imagenet" if pretrained else None,
+            in_channels=seg_in_chans,
+            classes=1,
+            **segmentation_params
+        )
+
+        self.classification_model = timm.create_model(
+            classification_model,
+            pretrained=pretrained,
+            in_chans=in_chans+1 if self.concat else 1,
+            num_classes=num_classes,
+            **classification_params
+        )
+        feature_dim = self.classification_model.get_classifier().in_features
+        self.classification_model.reset_classifier(0, '')
+
+        if custom_attention == 'triplet':
+            self.attention = TripletAttention()
+        else:
+            self.attention = nn.Identity()
+
+        if custom_classifier == 'avg':
+            self.global_pool = nn.AdaptiveAvgPool2d((1, 1))
+        elif custom_classifier == 'max':
+            self.global_pool = nn.AdaptiveMaxPool2d((1, 1))
+        elif custom_classifier == 'concat':
+            self.global_pool = AdaptiveConcatPool2d()
+            feature_dim = feature_dim * 2
+        elif custom_classifier == 'gem':
+            self.global_pool = GeM(p=3, eps=1e-4)
+        else:
+            self.global_pool = nn.AdaptiveAvgPool2d((1, 1))
+
+        self.head = nn.Sequential(
+            Flatten(),
+            nn.Linear(feature_dim, 512), 
+            nn.Dropout(dropout) if dropout > 0 else nn.Identity(),
+            nn.ReLU(inplace=True), 
+            nn.Linear(512, num_classes))
+
+    def forward(self, x):
+        x = self.preprocess(x)
+        mask = self.segmentation_model(x)
+        
+        if self.concat:
+            output = torch.cat([x, mask], axis=1)
+        else:
+            output = mask
+
+        output = self.classification_model(output)
+        output = self.attention(output)
+        output = self.global_pool(output)
+        output = self.head(output)
+
+        if self.return_mask:
+            return output, mask
+        else:
+            return output

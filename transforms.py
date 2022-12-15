@@ -114,6 +114,20 @@ class AdaptiveResize(DualTransform):
         return {'resize_f': self.resize_f, 'img_size': self.img_size, 'method': self.method}
 
 
+class Crop352(DualTransform):
+    def __init__(self, always_apply=True, p=1.0):
+        super().__init__(always_apply, p)
+
+    def apply(self, img: np.ndarray, **params): # img: (freq, t, ch)
+        return img[4:356, :, :]
+
+    def apply_to_mask(self, img: np.ndarray, **params):
+        return img[4:356, :, :]
+
+    def get_transform_init_args_names(self):
+        return {}
+
+
 class RandomAmplify(ImageOnlyTransform):
     def __init__(self, amp_range=(0.9, 1.1), always_apply=False, p=0.5):
         super().__init__(always_apply, p)

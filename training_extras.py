@@ -69,6 +69,31 @@ class MixupTrain2(SimpleHook):
         return f'MixUp2(alpha={self.alpha}, pos_pos={self.pos}, neg_neg={self.neg})'
 
 
+class SegAndClsTrain(SimpleHook):
+    '''
+    Training SegmentationAndClassification model (segmentation aux loss)
+    '''
+
+    def __init__(self, evaluate_in_batch=False):
+        super().__init__(evaluate_in_batch=evaluate_in_batch)
+    
+    def forward_train(self, trainer, inputs):
+        target = inputs[2]
+        target_mask = inputs[1]
+        approx, mask = trainer.model(inputs[0])
+        loss = trainer.criterion({'logit': approx, 'mask': mask}, {'logit': target, 'mask': target_mask})
+        return loss, approx.detach()
+
+    forward_valid = forward_train
+
+    def forward_test(self, trainer, inputs):
+        approx, _ = trainer.model(inputs[0])
+        return approx
+
+    def __repr__(self) -> str:
+        return f'SegAndClsTrain()'
+
+
 def make_tta_dataloader(loader, dataset, dataset_params):
     skip_keys = ['dataset', 'sampler', 'batch_sampler', 'dataset_kind']
     dl_args = {

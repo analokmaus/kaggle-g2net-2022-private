@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from segmentation_models_pytorch.losses import DiceLoss
 
 
 def binary_cross_entropy(inputs, target, weight=None, reduction='mean', smooth_eps=None, from_logits=False):
@@ -75,3 +76,23 @@ class FocalLoss(nn.Module):
 
     def __repr__(self):
         return f'FocalLoss(smoothing={self.smoothing})'
+
+
+class BCEWithLogitsAux(nn.Module):
+    def __init__(self, weight=(0.5, 0.5)):
+        super().__init__()
+        self.weight = weight
+        self.bce = binary_cross_entropy_with_logits
+        self.aux = DiceLoss(mode='binary')
+
+    def forward(self, inputs, targets):
+        bce_loss = self.bce(inputs['logit'], targets['logit'])
+        if inputs['mask'].shape[-1] !=  targets['mask'].shape[-1]:
+            bs, c, h, w= targets['mask'].shape
+            aux_loss = self.aux(inputs['mask'], targets['mask'].view(bs, c, h, w//4, 4).mean(4))
+        else:
+            aux_loss = self.aux(inputs['mask'], targets['mask'])
+        return bce_loss * self.weight[0] + aux_loss * self.weight[1]
+    
+    def __repr__(self):
+        return f'BCEWithLogitsAux(weight={self.weight})'
