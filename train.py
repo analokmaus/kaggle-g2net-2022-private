@@ -125,7 +125,6 @@ if __name__ == "__main__":
         train = train.sample(10000)
         valid = valid.sample(1000)
         test = test.iloc[:1000]
-    train = train.loc[train['target'] != -1]
     
     '''
     Training
@@ -149,7 +148,8 @@ if __name__ == "__main__":
         train_fold = train
         valid_fold = valid
 
-        LOGGER(f'train positive: {train_fold.target.values.mean(0)} ({len(train_fold)})')
+        if 'target' in train_fold.columns:
+            LOGGER(f'train positive: {train_fold.target.values.mean(0)} ({len(train_fold)})')
         LOGGER(f'valid positive: {valid_fold.target.values.mean(0)} ({len(valid_fold)})')
 
         train_data = cfg.dataset(

@@ -27,6 +27,7 @@ class SimpleCNN(nn.Module):
                  custom_preprocess='none',
                  custom_classifier='none',
                  custom_attention='none', 
+                 dropout=0,
                  augmentations=None,
                  augmentations_test=None, 
                  resize_img=None,
@@ -97,6 +98,7 @@ class SimpleCNN(nn.Module):
                 global_pool, 
                 Flatten(),
                 nn.Linear(feature_dim, 512), 
+                nn.Dropout(dropout) if dropout > 0 else nn.Identity(),
                 nn.ReLU(inplace=True), 
                 nn.Linear(512, num_classes)
             )

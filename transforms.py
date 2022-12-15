@@ -108,9 +108,7 @@ class AdaptiveResize(DualTransform):
             img_size = img.shape[1] // self.resize_f
         else:
             img_size = self.img_size
-        img = adaptive_resize(img, img_size, self.resize_func)
-        img = (img - img.min()) / (img.max() - img.min())
-        return (img > 0.1).astype(np.float32)
+        return adaptive_resize(img, img_size, self.resize_func)
 
     def get_transform_init_args_names(self):
         return {'resize_f': self.resize_f, 'img_size': self.img_size, 'method': self.method}

@@ -2,7 +2,7 @@ from pathlib import Path
 
 import torch.nn as nn
 import torch.optim as optim
-from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
+from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts, CosineAnnealingLR
 from sklearn.model_selection import StratifiedKFold, StratifiedGroupKFold
 import albumentations as A
 from albumentations.pytorch.transforms import ToTensorV2
@@ -324,6 +324,16 @@ class Ds09mod8(Ds09val1):
 
 class Ds14(Ds09mod6):
     name = 'ds_14' # full data training
+    train_path = Path('input/g2net-detecting-continuous-gravitational-waves/concat_v13_v14_v15_v16_v17.csv')
+    model_params = dict(
+        model_name='tf_efficientnet_b7_ns',
+        pretrained=True,
+        num_classes=1,
+        timm_params=dict(in_chans=2),
+        dropout=0.5,
+        custom_preprocess='chris_debias',
+        custom_classifier='avg'
+    )
     transforms = dict(
         train=A.Compose([
             A.HorizontalFlip(p=0.5),
@@ -372,7 +382,13 @@ class Ds15(Baseline3):
     )
     parallel = 'ddp'
     batch_size = 64 # 16 per gpu
-    optimizer_params = dict(lr=1e-3, weight_decay=1e-6)
+    num_epochs = 50
+    optimizer = optim.Adam
+    optimizer_params = dict(lr=5e-4, weight_decay=1e-6)
+    # scheduler = CosineAnnealingLR
+    # scheduler_params = dict(T_max=5, eta_min=1e-6)
+    scheduler = CosineAnnealingWarmRestarts
+    scheduler_params = dict(T_0=10, T_mult=1, eta_min=1e-6)
     transforms = dict(
         train=A.Compose([
             A.HorizontalFlip(p=0.5),
@@ -396,8 +412,77 @@ class Ds15(Baseline3):
         EarlyStopping(patience=10, maximize=True, skip_epoch=4),
         SaveSnapshot()
     ]
-    
 
+
+class Ds15l(Ds15):
+    name = 'ds_15_l'
+    num_epochs = 100
+    callbacks = [
+        EarlyStopping(patience=30, maximize=True, skip_epoch=10),
+        SaveSnapshot()
+    ]
+
+
+class Ds15aug0(Ds15):
+    name = 'ds_15_aug0'
+    transforms = dict(
+        train=A.Compose([
+            A.HorizontalFlip(p=0.5),
+            A.VerticalFlip(p=0.5),
+            RandomAmplify(p=0.25),
+            MixupChannel(20, p=0.25),
+            DropChannel(p=0.25),
+            ToTensorV2(),
+            RemoveAnomaly(),
+            FrequencyMaskingTensor(24, p=0.5),
+            FrequencyMaskingTensor(24, p=0.5),
+            FrequencyMaskingTensor(24, p=0.5),
+            TimeMaskingTensor(96, p=0.5),
+            TimeMaskingTensor(96, p=0.5),
+            TimeMaskingTensor(96, p=0.5),]),
+        test=A.Compose([
+            ToTensorV2(), RemoveAnomaly()]),
+        tta=A.Compose([
+            ToTensorV2(), RemoveAnomaly()]),
+    )
+
+
+class Ds15aug1(Ds15):
+    name = 'ds_15_aug1'
+    dataset_params = dict(
+        preprocess=A.Compose([
+            AdaptiveResize(img_size=720), NormalizeSpectrogram('chris')]),
+        match_time=False,
+        return_mask=False,
+        positive_p=2/3,
+        signal_amplifier=1.5,
+        noise_mixup_p=0.25,
+        signal_path=Path('input/g2net-detecting-continuous-gravitational-waves/v18s.csv'),
+        signal_dir=Path('input/g2net-detecting-continuous-gravitational-waves/v18s'),
+        )
+
+
+class Ds16(Ds15): # signal based sampling
+    name = 'ds_16'
+    dataset = G2Net2022Dataset88
+    train_path = Path('input/g2net-detecting-continuous-gravitational-waves/v18s.csv')
+    train_dir = Path('input/g2net-detecting-continuous-gravitational-waves/v18s')
+    dataset_params = dict(
+        preprocess=A.Compose([
+            AdaptiveResize(img_size=720), NormalizeSpectrogram('chris')]),
+        match_time=False,
+        return_mask=False,
+        positive_p=2/3,
+        signal_amplifier=1.0,
+        noise_mixup_p=0,
+        noise_path=Path('input/g2net-detecting-continuous-gravitational-waves/concat_v18n1_v18n2.csv'),
+        noise_dir=None,)
+    num_epochs = 50
+    callbacks = [
+        EarlyStopping(patience=20, maximize=True, skip_epoch=10),
+        SaveSnapshot()
+    ]
+    
 
 class Aug04(Ds09val1):
     name = 'aug_04'

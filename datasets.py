@@ -449,7 +449,7 @@ class ChrisDataset(D.Dataset):
 
 class G2Net2022Dataset8(D.Dataset):
     '''
-    Infinite training set
+    Infinite training set noise based sampling
     '''
     def __init__(
         self, 
@@ -458,6 +458,9 @@ class G2Net2022Dataset8(D.Dataset):
         signal_path=None,
         signal_dir=None,
         positive_p=0.66,
+        noise_mixup_p=0.0,
+        dataset_multiplier=1,
+        signal_amplifier=1.0,
         match_time=False,
         fillna=False,
         is_test=False,
@@ -467,11 +470,16 @@ class G2Net2022Dataset8(D.Dataset):
         random_state=0,
         cache_limit=0, # in GB
         ):
-        self.df = df
+        if dataset_multiplier > 1 and not is_test:
+            self.df = pd.concat([df] * dataset_multiplier, axis=0).reset_index(drop=True)
+        else:
+            self.df = df
         self.signal_df = pd.read_csv(signal_path)
         self.data_dir = data_dir
         self.signal_dir = signal_dir
         self.positive_p = positive_p
+        self.noise_mixup_p = noise_mixup_p
+        self.signal_amp = signal_amplifier
         self.match = match_time
         self.fillna = fillna
         self.preprocess = preprocess
@@ -489,7 +497,7 @@ class G2Net2022Dataset8(D.Dataset):
     def __getitem__(self, index):
         return self._load_noise_and_signal(index)
 
-    def _load_noise_and_signal(self, index):
+    def _load_noise(self, index):
         r = self.df.iloc[index]
         if r['id'] in self.cache.keys():
             img, freq, frame_h1, frame_l1 = self.cache[r['id']]
@@ -532,6 +540,19 @@ class G2Net2022Dataset8(D.Dataset):
             else:
                 pass
 
+        return img, freq, frame_h1, frame_l1
+
+    def _load_noise_and_signal(self, index):
+        r = self.df.iloc[index]
+        img, freq, frame_h1, frame_l1 = self._load_noise(index)
+        if (np.random.random() < self.noise_mixup_p) and not self.is_test:
+            index2 = np.random.randint(0, len(self.df))
+            img2, _, _, _ = self._load_noise(index2)
+            if img2.shape[1] > img.shape[1]:
+                img = img / 2 + img2[:, :img.shape[1], :] / 2
+            else:
+                img[:, :img2.shape[1], :] -= (img[:, :img2.shape[1], :] / 2 - img2 / 2)
+
         if (np.random.random() < self.positive_p) and not self.is_test: # inject signal
             cand_signal = self.signal_df.query(f'{freq-50} <= F0 <= {freq+50}').sample()
             sid = cand_signal['id'].values[0]
@@ -541,6 +562,7 @@ class G2Net2022Dataset8(D.Dataset):
             spec_s = sft_s.real ** 2 + sft_s.imag ** 2
             shift_y = np.random.randint(-110, 110)
             spec_s = np.roll(spec_s, shift_y, axis=0)
+            spec_s *= self.signal_amp
             # img[:, :, :] = 0
 
             if self.match:
@@ -574,5 +596,186 @@ class G2Net2022Dataset8(D.Dataset):
 
         if self.return_mask:
             return img, mask, target
+        else:
+            return img, target
+
+
+class G2Net2022Dataset88(D.Dataset):
+    '''
+    Infinite training set signal based sampling
+    '''
+    def __init__(
+        self, 
+        df, 
+        data_dir=None,
+        noise_path=None,
+        noise_dir=None,
+        positive_p=0.66,
+        noise_mixup_p=0.0,
+        signal_amplifier=1.0,
+        match_time=False,
+        fillna=False,
+        is_test=False,
+        preprocess=None,
+        transforms=None,
+        return_mask=None,
+        random_state=0,
+        cache_limit=0, # in GB
+        ):
+        self.df = df
+        self.noise_df = pd.read_csv(noise_path)
+        self.data_dir = data_dir
+        self.noise_dir = noise_dir
+        self.positive_p = positive_p
+        self.noise_mixup_p = noise_mixup_p
+        self.signal_amp = signal_amplifier
+        self.match = match_time
+        self.fillna = fillna
+        self.preprocess = preprocess
+        self.transforms = transforms
+        self.is_test = is_test
+        self.cache = {'size': 0}
+        self.cache_limit = cache_limit
+        self.return_mask = return_mask
+        np.random.RandomState(random_state)
+        np.random.seed(random_state)
+
+    def __len__(self):
+        return len(self.df)
+    
+    def __getitem__(self, index):
+        return self._load_noise_and_signal(index)
+
+    def _load_noise(self, r):
+        if r['id'] in self.cache.keys():
+            img, freq, frame_h1, frame_l1 = self.cache[r['id']]
+        else:
+            if 'path' in r.index:
+                fname = r['path']
+            else:
+                fname = self.data_dir/f'{r.id}.pickle'
+            with open(fname, 'rb') as f:
+                data = pickle.load(f)
+                gid = list(data.keys())[0]
+                data = data[gid]
+            spec_h1, time_h1 = data['H1']['SFTs']*1e22, data['H1']['timestamps_GPS']
+            spec_l1, time_l1 = data['L1']['SFTs']*1e22, data['L1']['timestamps_GPS']
+            freq = data['frequency_Hz'].mean()
+
+            ref_time = min(time_h1.min(), time_l1.min())
+            frame_h1 = ((time_h1 - ref_time) / 1800).round().astype(np.uint64)
+            frame_l1 = ((time_l1 - ref_time) / 1800).round().astype(np.uint64)
+
+            if self.match:
+                _spec = np.full((2, 360, 5760), 0., np.complex64)
+                _spec[0][:, frame_h1[frame_h1 < 5760]] = spec_h1[:, frame_h1 < 5760]
+                _spec[1][:, frame_l1[frame_l1 < 5760]] = spec_l1[:, frame_l1 < 5760]
+                spec_h1, spec_l1 = _spec[0], _spec[1]
+            else:
+                if spec_h1.shape[1] < spec_l1.shape[1]:
+                    frame_l1 = frame_l1[:spec_h1.shape[1]]
+                    spec_l1 = spec_l1[:, :spec_h1.shape[1]]
+                elif spec_h1.shape[1] > spec_l1.shape[1]:
+                    frame_h1 = frame_h1[:spec_l1.shape[1]]
+                    spec_h1 = spec_h1[:, :spec_l1.shape[1]]
+
+            img = np.stack((spec_h1, spec_l1), axis=2) # (360, t, 2)
+            img = img.real ** 2 + img.imag ** 2
+
+            if self.cache['size'] < self.cache_limit:
+                self.cache[r['id']] = (img, freq, frame_h1, frame_l1)
+                self.cache['size'] += img.nbytes / (1024 ** 3)
+            else:
+                pass
+
+        return img, freq, frame_h1, frame_l1
+
+    def _load_signal(self, r):
+        if 'path' in r.index:
+            fname = r['path']
+        else:
+            fname = self.data_dir/f'{r.id}.pickle'
+        with open(fname, 'rb') as f:
+            data = pickle.load(f)
+        sft_s, _ = data['sft']*1e22, data['timestamps']
+        spec_s = sft_s.real ** 2 + sft_s.imag ** 2
+        shift_y = np.random.randint(-110, 110)
+        spec_s = np.roll(spec_s, shift_y, axis=0)
+        spec_s *= self.signal_amp
+        return spec_s
+
+    def _inject_signal(self, noise, signal, frame_h1, frame_l1):
+        # align timestamps
+        if self.match:
+            noise[:, frame_h1[frame_h1 < 5760], 0] += signal[:360, frame_h1[frame_h1 < 5760]]
+            noise[:, frame_l1[frame_l1 < 5760], 1] += signal[:360, frame_l1[frame_l1 < 5760]]
+            signal_mask = np.zeros((noise.shape[0], noise.shape[1]), dtype=np.float32)
+            if self.return_mask:
+                signal_bin = ((signal - signal.min()) / (signal.max() - signal.min()) > 0.1).astype(np.float32)   
+                signal_mask[:, frame_h1[frame_h1 < 5760]] = signal_bin[:360, frame_h1[frame_h1 < 5760]]
+                signal_mask[:, frame_l1[frame_l1 < 5760]] = signal_bin[:360, frame_l1[frame_l1 < 5760]]
+        else:
+            noise[:, :, 0] += signal[:360, frame_h1]
+            noise[:, :, 1] += signal[:360, frame_l1]
+            signal_mask = np.zeros((noise.shape[0], noise.shape[1]), dtype=np.float32)
+            if self.return_mask:
+                signal_bin = ((signal - signal.min()) / (signal.max() - signal.min()) > 0.1).astype(np.float32)   
+                signal_mask[:, :] = signal_bin[:, frame_h1]
+                signal_mask[:, :] = signal_bin[:, frame_l1]
+        return noise, signal_mask[:, :, None]
+
+    def _load_noise_and_signal(self, index):
+        if self.is_test: # test
+            r = self.df.iloc[index]
+            img, _, _, _ = self._load_noise(r)
+            signal_mask = np.zeros((img.shape[0], img.shape[1], 1), dtype=np.float32)
+            target = torch.tensor([r['target']]).float()
+
+        else: # train
+            if np.random.random() < self.positive_p:
+                signal_r = self.df.iloc[index]
+                signal_freq = signal_r['F0']
+                signal_spec = self._load_signal(signal_r)
+                
+                nearby_noises = self.noise_df.query(f'{signal_freq-50} <= freq <= {signal_freq+50}')
+                noise_r = nearby_noises.sample().iloc[0]
+                noise_spec, _, frame_h1, frame_l1 = self._load_noise(noise_r)
+
+                if np.random.random() < self.noise_mixup_p: # mixup noise
+                    noise_r2 = nearby_noises.sample().iloc[0]
+                    noise_spec2, _, _, _ = self._load_noise(noise_r2) # TODO: how to mixup timestamps?
+                    if noise_spec2.shape[1] > noise_spec.shape[1]:
+                        noise_spec = noise_spec / 2 + noise_spec2[:, :noise_spec.shape[1], :] / 2
+                    else:
+                        noise_spec[:, :noise_spec2.shape[1], :] -= (noise_spec[:, :noise_spec2.shape[1], :] / 2 - noise_spec2 / 2)
+
+                img, signal_mask = self._inject_signal(noise_spec, signal_spec, frame_h1, frame_l1)
+                target = torch.tensor([1]).float()
+            else:
+                noise_r = self.noise_df.sample().iloc[0]
+                img, _, frame_h1, frame_l1 = self._load_noise(noise_r)
+                signal_mask = np.zeros((img.shape[0], img.shape[1], 1), dtype=np.float32)
+                target = torch.tensor([0]).float()
+
+        if self.preprocess:
+            if self.return_mask:
+                t = self.preprocess(image=img, mask=signal_mask)
+                img = t['image']
+                signal_mask = t['mask']
+            else:
+                t = self.preprocess(image=img)
+                img = t['image']
+        
+        if self.transforms:
+            if self.return_mask:
+                t = self.transforms(image=img, mask=signal_mask)
+                img = t['image']
+                signal_mask = t['mask']
+            else:
+                t = self.transforms(image=img)
+                img = t['image']
+
+        if self.return_mask:
+            return img, signal_mask, target
         else:
             return img, target
