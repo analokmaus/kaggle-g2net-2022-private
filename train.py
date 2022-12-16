@@ -217,7 +217,7 @@ if __name__ == "__main__":
             trainer.ddp_sync_batch_norm = convert_sync_batchnorm
             trainer.ddp_params = dict(
                 broadcast_buffers=True, 
-                # find_unused_parameters=True
+                find_unused_parameters=True
             )
             trainer.fit(**FIT_PARAMS)
         except Exception as e:

@@ -728,6 +728,7 @@ class G2Net2022Dataset88(D.Dataset):
                 signal_bin = ((signal - signal.min()) / (signal.max() - signal.min()) > 0.25).astype(np.float32)   
                 signal_mask[:, :] = signal_bin[:, frame_h1]
                 signal_mask[:, :] = signal_bin[:, frame_l1]
+        signal_mask[signal_mask!=signal_mask] = 0
         return noise, signal_mask[:, :, None]
 
     def _load_noise_and_signal(self, index):

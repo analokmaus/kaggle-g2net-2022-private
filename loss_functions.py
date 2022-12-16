@@ -85,14 +85,18 @@ class BCEWithLogitsAux(nn.Module):
         self.bce = binary_cross_entropy_with_logits
         self.aux = DiceLoss(mode='binary')
 
-    def forward(self, inputs, targets):
-        bce_loss = self.bce(inputs['logit'], targets['logit'])
-        if inputs['mask'].shape[-1] !=  targets['mask'].shape[-1]:
-            bs, c, h, w= targets['mask'].shape
-            aux_loss = self.aux(inputs['mask'], targets['mask'].view(bs, c, h, w//4, 4).mean(4))
+    def forward(self, input_logit, target_logit, input_mask=None, target_mask=None):
+        bce_loss = self.bce(input_logit, target_logit)
+        if input_mask is None:
+            return bce_loss
         else:
-            aux_loss = self.aux(inputs['mask'], targets['mask'])
-        return bce_loss * self.weight[0] + aux_loss * self.weight[1]
+            if input_mask.shape[-1] !=  target_mask.shape[-1]:
+                bs, c, h, w= target_mask.shape
+                target_mask = target_mask.view(bs, c, h, w//4, 4).mean(4)
+                aux_loss = self.aux(input_mask, target_mask)
+            else:
+                aux_loss = self.aux(input_mask, target_mask)
+            return bce_loss * self.weight[0] + aux_loss * self.weight[1]
     
     def __repr__(self):
         return f'BCEWithLogitsAux(weight={self.weight})'

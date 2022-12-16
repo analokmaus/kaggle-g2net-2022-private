@@ -533,6 +533,26 @@ class Ds16aug2(Ds16):
         in_chans=2,
         num_classes=1,
         custom_classifier='avg',
+        pretrained=True
+    )
+    transforms = dict(
+        train=A.Compose([
+            A.HorizontalFlip(p=0.5),
+            A.VerticalFlip(p=0.5),
+            RandomAmplify(p=0.25),
+            DropChannel(p=0.25),
+            ToTensorV2(),
+            RemoveAnomaly(),
+            FrequencyMaskingTensor(24, p=0.5),
+            FrequencyMaskingTensor(24, p=0.5),
+            FrequencyMaskingTensor(24, p=0.5),
+            TimeMaskingTensor(32, p=0.5),
+            TimeMaskingTensor(32, p=0.5),
+            TimeMaskingTensor(32, p=0.5),]),
+        test=A.Compose([
+            ToTensorV2(), RemoveAnomaly()]),
+        tta=A.Compose([
+            ToTensorV2(), RemoveAnomaly()]),
     )
     
 
@@ -580,8 +600,8 @@ class Model01(Ds16aug0):
         return_mask=True,
         positive_p=2/3,
         signal_amplifier=1.0,
-        shift_range=(-165, 165),
-        noise_mixup_p=0,
+        shift_range=(-150, 150),
+        noise_mixup_p=0.25,
         noise_path=Path('input/g2net-detecting-continuous-gravitational-waves/concat_v18n1_v18n2.csv'),
         noise_dir=None,)
     model = SegmentationAndClassification
@@ -592,7 +612,8 @@ class Model01(Ds16aug0):
         num_classes=1,
         custom_preprocess='chris_debias',
         custom_classifier='avg',
-        return_mask=True
+        return_mask=True,
+        pretrained=True
     )
     hook = SegAndClsTrain()
     criterion = BCEWithLogitsAux(weight=(0.6, 0.4))
@@ -615,3 +636,24 @@ class Model01(Ds16aug0):
         tta=A.Compose([
             ToTensorV2(transpose_mask=True), RemoveAnomaly()]),
     )
+
+
+class Model01lf0(Model01):
+    name = 'model_01_lf0'
+    criterion = BCEWithLogitsAux(weight=(0.7, 0.3))
+
+
+class Model02(Model01):
+    name = 'model_02'
+    model_params = dict(
+        segmentation_model='timm-efficientnet-b7',
+        classification_model='tf_efficientnet_b0_ns',
+        in_chans=2,
+        num_classes=1,
+        concat_original=True,
+        custom_preprocess='chris_debias',
+        custom_classifier='avg',
+        return_mask=True,
+        pretrained=True
+    )
+    

@@ -81,10 +81,14 @@ class SegAndClsTrain(SimpleHook):
         target = inputs[2]
         target_mask = inputs[1]
         approx, mask = trainer.model(inputs[0])
-        loss = trainer.criterion({'logit': approx, 'mask': mask}, {'logit': target, 'mask': target_mask})
+        loss = trainer.criterion(approx, target, mask, target_mask)
         return loss, approx.detach()
 
-    forward_valid = forward_train
+    def forward_valid(self, trainer, inputs):
+        target = inputs[2]
+        approx, _ = trainer.model(inputs[0])
+        loss = trainer.criterion(approx, target)
+        return loss, approx.detach()
 
     def forward_test(self, trainer, inputs):
         approx, _ = trainer.model(inputs[0])

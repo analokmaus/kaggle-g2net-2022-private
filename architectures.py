@@ -296,10 +296,11 @@ class SegmentationAndClassification(nn.Module):
             nn.Linear(512, num_classes))
 
     def forward(self, x):
-        x = self.preprocess(x)
-        mask = self.segmentation_model(x)
+        mask = self.segmentation_model(self.preprocess(x))
         
         if self.concat:
+            if mask.shape[3] != x.shape[3]:
+                mask =  F.interpolate(mask, size=(mask.shape[2], mask.shape[3]*4))
             output = torch.cat([x, mask], axis=1)
         else:
             output = mask
