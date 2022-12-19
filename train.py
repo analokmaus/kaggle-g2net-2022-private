@@ -45,12 +45,12 @@ def inference(data_loader, tta=False):
             specs_aug2 = torch.flip(specs, (3,))
 
         with torch.no_grad():
-            if len(inputs) == 2:
+            if len(inputs) <= 3:
                 pred0 = model(specs).cpu().numpy()
                 if tta:
                     pred1 = model(specs_aug1).cpu().numpy()
                     pred2 = model(specs_aug2).cpu().numpy()
-            elif len(inputs) > 2:
+            elif len(inputs) > 3:
                 pred0 = forward_test_chris(model, specs, inputs).cpu().numpy()
                 if tta:
                     pred1 = forward_test_chris(model, specs_aug1, inputs).cpu().numpy()
@@ -219,6 +219,8 @@ if __name__ == "__main__":
                 broadcast_buffers=True, 
                 find_unused_parameters=True
             )
+            if cfg.loader_to_callback:
+                trainer.loader_to_callback = True
             trainer.fit(**FIT_PARAMS)
         except Exception as e:
             err = traceback.format_exc()
@@ -264,6 +266,7 @@ if __name__ == "__main__":
         del checkpoint; gc.collect()
         if cfg.parallel == 'ddp':
             model = convert_sync_batchnorm(model)
+        model.return_mask = False
         model.cuda()
         model.eval()
 

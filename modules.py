@@ -1,7 +1,9 @@
 import torch
 import torch.nn as nn
-import math
 from timm.models.layers.conv_bn_act import ConvBnAct
+import timm
+import torch
+from torch import nn
 
 
 def mixup(img, lam, idx): # img: (N, C, H, W)
@@ -84,6 +86,60 @@ class BidirectionalLSTM(nn.Module):
         output = self.embed(output) 
         output = output.view(dim, bs, -1)
         return output
+
+
+class Upsample(nn.Module):
+    def __init__(self, in_channels, target_size, with_conv=True):
+        super().__init__()
+        self.with_conv = with_conv
+        self.target_size = target_size
+        if self.with_conv:
+            self.conv = torch.nn.Conv2d(
+                in_channels, in_channels, kernel_size=3, stride=1, padding=1
+            )
+
+    def forward(self, x):
+        x = torch.nn.functional.interpolate(x, size=self.target_size, mode="bilinear")
+        if self.with_conv:
+            x = self.conv(x)
+        return x
+
+
+class CustomHybdridEmbed(nn.Module):
+    def __init__(
+        self,
+        decoder_proj_conv,
+        channel_in=2,
+        encoder_name="inception_v4",
+        encoder_out_layer_num=[2],
+        transformer_original_input_size=(1, 3, 224, 224),
+    ):
+        super().__init__()
+        self.encoder = timm.create_model(
+            encoder_name,
+            features_only=True,
+            out_indices=encoder_out_layer_num,
+            pretrained=True,
+            in_chans=channel_in,
+        )
+
+        with torch.no_grad():
+            x = torch.rand(1, channel_in, 360, 512)
+            enc_ch_num = self.encoder(x)[0].shape[1]
+            decoder_in_channels = decoder_proj_conv(
+                torch.rand(transformer_original_input_size)
+            ).shape
+
+        self.resize = Upsample(enc_ch_num, decoder_in_channels[2:])
+        self.proj = nn.Conv2d(
+            enc_ch_num, decoder_in_channels[1], kernel_size=1, stride=1
+        )
+
+    def forward(self, x):
+        x = self.encoder(x)[0]
+        x = self.resize(x)
+        x = self.proj(x).flatten(2).transpose(1, 2)
+        return x
 
 
 '''

@@ -177,7 +177,7 @@ class ClassificationModel(nn.Module):
         else:
             self.preprocess = nn.Identity()
             cls_in_chans = in_chans
-
+        
         self.classification_model = timm.create_model(
             classification_model,
             pretrained=pretrained,
@@ -204,6 +204,16 @@ class ClassificationModel(nn.Module):
             self.global_pool = GeM(p=3, eps=1e-4)
         else:
             self.global_pool = nn.AdaptiveAvgPool2d((1, 1))
+        
+        if 'Transformer' in self.classification_model.__class__.__name__:
+            self.classification_model.patch_embed = CustomHybdridEmbed(
+                self.classification_model.patch_embed.proj, 
+                channel_in=cls_in_chans,
+                transformer_original_input_size=(1, cls_in_chans, *self.classification_model.patch_embed.img_size)
+            )
+            self.is_tranformer = True
+        else:
+            self.is_tranformer = False
 
         self.head = nn.Sequential(
             Flatten(),
@@ -215,7 +225,10 @@ class ClassificationModel(nn.Module):
     def forward(self, x):
         output = self.classification_model(self.preprocess(x))
         output = self.attention(output)
-        output = self.global_pool(output)
+        if self.is_tranformer:
+            output = output.mean(dim=1)
+        else:
+            output = self.global_pool(output)
         output = self.head(output)
         return output
 

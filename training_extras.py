@@ -98,6 +98,15 @@ class SegAndClsTrain(SimpleHook):
         return f'SegAndClsTrain()'
 
 
+class StepDataset(CallbackTemplate):
+
+    def __init__(self):
+        super().__init__()
+    
+    def after_epoch(self, env, loader, loader_valid):
+        loader.dataset.step()
+
+
 def make_tta_dataloader(loader, dataset, dataset_params):
     skip_keys = ['dataset', 'sampler', 'batch_sampler', 'dataset_kind']
     dl_args = {

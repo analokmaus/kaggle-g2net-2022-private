@@ -69,6 +69,7 @@ class Baseline:
     deterministic = False
     clip_grad = 'value'
     max_grad_norm = 10000
+    loader_to_callback = False
     hook = TrainHook()
     callbacks = [
         EarlyStopping(patience=5, maximize=True, skip_epoch=4),
@@ -324,16 +325,19 @@ class Ds09mod8(Ds09val1):
 
 class Ds14(Ds09mod6):
     name = 'ds_14' # full data training
-    train_path = Path('input/g2net-detecting-continuous-gravitational-waves/concat_v13_v14_v15_v16_v17.csv')
+    train_path = Path('input/g2net-detecting-continuous-gravitational-waves/concat_v18n1_v18n2_v19_v20.csv')
+    model = ClassificationModel
     model_params = dict(
-        model_name='tf_efficientnet_b7_ns',
-        pretrained=True,
+        classification_model='tf_efficientnet_b7_ns',
+        # classification_model='swin_base_patch4_window12_384',
+        in_chans=2,
         num_classes=1,
-        timm_params=dict(in_chans=2),
-        dropout=0.5,
         custom_preprocess='chris_debias',
-        custom_classifier='avg'
+        custom_classifier='avg',
+        pretrained=True
     )
+    batch_size = 32
+    optimizer_params = dict(lr=5e-4, weight_decay=1e-6)
     transforms = dict(
         train=A.Compose([
             A.HorizontalFlip(p=0.5),
@@ -354,6 +358,66 @@ class Ds14(Ds09mod6):
         tta=A.Compose([
             ToTensorV2(), RemoveAnomaly()]),
     )
+
+
+class Ds14prep0(Ds14):
+    name = 'ds_14_prep0'
+    dataset_params = dict(
+        preprocess=A.Compose([
+            ToSpectrogram(), AdaptiveResize(img_size=720), 
+            NormalizeSpectrogram('column_wise')
+        ]),
+        match_time=False)
+    num_epochs = 25
+    transforms = dict(
+        train=A.Compose([
+            A.HorizontalFlip(p=0.5),
+            A.VerticalFlip(p=0.5),
+            ShiftImage(x_max=0, y_max=180, p=0.5),
+            RandomAmplify(p=0.25),
+            ClipSignal(-5, 5),
+            ToTensorV2(),
+            FrequencyMaskingTensor(24, p=0.5),
+            FrequencyMaskingTensor(24, p=0.5),
+            FrequencyMaskingTensor(24, p=0.5),
+            TimeMaskingTensor(96, p=0.5),
+            TimeMaskingTensor(96, p=0.5),
+            TimeMaskingTensor(96, p=0.5),]),
+        test=A.Compose([
+            ClipSignal(-5, 5), ToTensorV2()]),
+        tta=A.Compose([
+            ClipSignal(-5, 5), ToTensorV2()]),
+    )
+
+
+class Ds14prep1(Ds14prep0):
+    name = 'ds_14_prep1'
+    dataset_params = dict(
+        preprocess=A.Compose([
+            ToSpectrogram(), AdaptiveResize(img_size=720), 
+            NormalizeSpectrogram('column_row_wise')
+        ]),
+        match_time=False)
+
+    
+class Ds14prep2(Ds14):
+    name = 'ds_14_prep2'
+    dataset_params = dict(
+        preprocess=A.Compose([
+            ToSpectrogram(), AdaptiveResize(img_size=720), 
+            NormalizeSpectrogram('chris')
+        ]),
+        match_time=True)
+
+
+class Ds14prep3(Ds14):
+    name = 'ds_14_prep3'
+    dataset_params = dict(
+        preprocess=A.Compose([
+            ToSpectrogram(), AdaptiveResize(img_size=720), 
+            NormalizeSpectrogram('column_wise')
+        ]),
+        match_time=True)
 
 
 class Ds15(Baseline3):
@@ -512,48 +576,47 @@ class Ds16aug1(Ds16):
         noise_mixup_p=0.25,
         noise_path=Path('input/g2net-detecting-continuous-gravitational-waves/concat_v18n1_v18n2.csv'),
         noise_dir=None,)
+    
 
 
-class Ds16aug2(Ds16):
+class Ds16aug2(Ds16): 
     name = 'ds_16_aug2'
     dataset_params = dict(
         preprocess=A.Compose([
-            AdaptiveResize(img_size=256), NormalizeSpectrogram('constant')]),
+            AdaptiveResize(img_size=720), NormalizeSpectrogram('chris')]),
         match_time=False,
         return_mask=False,
         positive_p=2/3,
-        signal_amplifier=1.0,
-        shift_range=(-165, 165),
-        noise_mixup_p=0.25,
+        signal_amplifier=np.linspace(2.0, 1.0, 40),
+        noise_mixup_p=0,
         noise_path=Path('input/g2net-detecting-continuous-gravitational-waves/concat_v18n1_v18n2.csv'),
         noise_dir=None,)
-    model = ClassificationModel
-    model_params = dict(
-        classification_model='tf_efficientnet_b7_ns',
-        in_chans=2,
-        num_classes=1,
-        custom_classifier='avg',
-        pretrained=True
-    )
-    transforms = dict(
-        train=A.Compose([
-            A.HorizontalFlip(p=0.5),
-            A.VerticalFlip(p=0.5),
-            RandomAmplify(p=0.25),
-            DropChannel(p=0.25),
-            ToTensorV2(),
-            RemoveAnomaly(),
-            FrequencyMaskingTensor(24, p=0.5),
-            FrequencyMaskingTensor(24, p=0.5),
-            FrequencyMaskingTensor(24, p=0.5),
-            TimeMaskingTensor(32, p=0.5),
-            TimeMaskingTensor(32, p=0.5),
-            TimeMaskingTensor(32, p=0.5),]),
-        test=A.Compose([
-            ToTensorV2(), RemoveAnomaly()]),
-        tta=A.Compose([
-            ToTensorV2(), RemoveAnomaly()]),
-    )
+    num_epochs = 40
+    callbacks = [
+        EarlyStopping(patience=20, maximize=True, skip_epoch=10),
+        SaveSnapshot(), StepDataset()
+    ]
+    loader_to_callback = True
+
+
+class Ds16aug3(Ds16): 
+    name = 'ds_16_aug3'
+    dataset_params = dict(
+        preprocess=A.Compose([
+            AdaptiveResize(img_size=720), NormalizeSpectrogram('chris')]),
+        match_time=False,
+        return_mask=False,
+        positive_p=2/3,
+        signal_amplifier=np.linspace(2.0, 1.0, 10),
+        noise_mixup_p=0,
+        noise_path=Path('input/g2net-detecting-continuous-gravitational-waves/concat_v18n1_v18n2.csv'),
+        noise_dir=None,)
+    num_epochs = 40
+    callbacks = [
+        EarlyStopping(patience=20, maximize=True, skip_epoch=10),
+        SaveSnapshot(), StepDataset()
+    ]
+    loader_to_callback = True
     
 
 class Aug04(Ds09val1):
@@ -656,4 +719,54 @@ class Model02(Model01):
         return_mask=True,
         pretrained=True
     )
+
+
+class Model02lf0(Model02):
+    name = 'model_02_lf0'
+    criterion = BCEWithLogitsAux(weight=(0.7, 0.3))
+
+
+class Model02lf1(Model02):
+    name = 'model_02_lf1'
+    criterion = BCEWithLogitsAux(weight=(0.75, 0.25))
+
+
+class Model02aug0(Model02):
+    name = 'model_02_aug0'
+    transforms = dict(
+        train=A.Compose([
+            A.HorizontalFlip(p=0.5),
+            A.VerticalFlip(p=0.5),
+            RandomAmplify(p=0.25),
+            ToTensorV2(transpose_mask=True),
+            FrequencyMaskingTensor(24, p=0.5),
+            FrequencyMaskingTensor(24, p=0.5),
+            FrequencyMaskingTensor(24, p=0.5),
+            TimeMaskingTensor(96, p=0.5),
+            TimeMaskingTensor(96, p=0.5),
+            TimeMaskingTensor(96, p=0.5),]),
+        test=A.Compose([
+            ToTensorV2(transpose_mask=True)]),
+        tta=A.Compose([
+            ToTensorV2(transpose_mask=True)]),
+    )
+
+
+class Model02aug1(Model02):
+    name = 'model_02_aug1'
+    transforms = dict(
+        train=A.Compose([
+            A.HorizontalFlip(p=0.5),
+            A.VerticalFlip(p=0.5),
+            RandomAmplify(p=0.25),
+            DropChannel(p=0.25),
+            ToTensorV2(transpose_mask=True),
+            RemoveAnomaly(),
+            ]),
+        test=A.Compose([
+            ToTensorV2(transpose_mask=True), RemoveAnomaly()]),
+        tta=A.Compose([
+            ToTensorV2(transpose_mask=True), RemoveAnomaly()]),
+    )
+
     

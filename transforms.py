@@ -65,19 +65,19 @@ class NormalizeSpectrogram(ImageOnlyTransform):
             for ch in range(img.shape[2]):
                 img[:, :, ch] /= img[:, :, ch].mean() 
                 img[:, :, ch] -= img[:, :, ch].mean(axis=0)[None, :]
-                img[:, :, ch] /= img[:, :, ch].std(axis=0)[None, :]
+                img[:, :, ch] /= (img[:, :, ch].std(axis=0)[None, :] + 1e-6)
         elif self.method == 'row_wise':
             for ch in range(img.shape[2]):
                 img[:, :, ch] /= img[:, :, ch].mean() 
                 img[:, :, ch] -= img[:, :, ch].mean(axis=1)[:, None]
-                img[:, :, ch] /= img[:, :, ch].std(axis=1)[:, None]
+                img[:, :, ch] /= (img[:, :, ch].std(axis=1)[:, None] + 1e-6)
         elif self.method == 'column_row_wise':
             for ch in range(img.shape[2]):
                 img[:, :, ch] /= img[:, :, ch].mean() 
                 img[:, :, ch] -= img[:, :, ch].mean(axis=0)[None, :]
-                img[:, :, ch] /= img[:, :, ch].std(axis=0)[None, :]
+                img[:, :, ch] /= (img[:, :, ch].std(axis=0)[None, :] + 1e-6)
                 img[:, :, ch] -= img[:, :, ch].mean(axis=1)[:, None]
-                img[:, :, ch] /= img[:, :, ch].std(axis=1)[:, None]
+                img[:, :, ch] /= (img[:, :, ch].std(axis=1)[:, None] + 1e-6)
         return img
 
     def get_transform_init_args_names(self):

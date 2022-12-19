@@ -629,7 +629,6 @@ class G2Net2022Dataset88(D.Dataset):
         self.noise_dir = noise_dir
         self.positive_p = positive_p
         self.noise_mixup_p = noise_mixup_p
-        self.signal_amp = signal_amplifier
         self.match = match_time
         self.fillna = fillna
         self.shift_range = shift_range
@@ -639,6 +638,11 @@ class G2Net2022Dataset88(D.Dataset):
         self.cache = {'size': 0}
         self.cache_limit = cache_limit
         self.return_mask = return_mask
+        if isinstance(signal_amplifier, (int, float)):
+            self.signal_amp = [signal_amplifier]
+        else:
+            self.signal_amp = signal_amplifier
+        self._epoch = 0
         np.random.RandomState(random_state)
         np.random.seed(random_state)
 
@@ -707,7 +711,7 @@ class G2Net2022Dataset88(D.Dataset):
             spec_s[:shift_y, :] = 0
         else:
             spec_s[shift_y:, :] = 0
-        spec_s *= self.signal_amp
+        spec_s *= self.signal_amp[min(self._epoch, len(self.signal_amp)-1)]
         return spec_s
 
     def _inject_signal(self, noise, signal, frame_h1, frame_l1):
@@ -798,3 +802,6 @@ class G2Net2022Dataset88(D.Dataset):
             return img, signal_mask, target
         else:
             return img, target
+
+    def step(self):
+        self._epoch += 1
