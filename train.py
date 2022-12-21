@@ -272,6 +272,10 @@ if __name__ == "__main__":
 
         pred, pred_tta = inference(test_loader, opt.tta)
         oof, oof_tta = inference(valid_loader, opt.tta)
+        np.nan_to_num(pred, nan=0.5, copy=False)
+        np.nan_to_num(pred_tta, nan=0.5, copy=False)
+        np.nan_to_num(oof, nan=0.5, copy=False)
+        np.nan_to_num(oof_tta, nan=0.5, copy=False)
         predictions = pred
         predictions_tta = pred_tta
         outoffolds = oof
@@ -285,7 +289,6 @@ if __name__ == "__main__":
     if opt.tta:
         np.save(export_dir/'predictions_tta', predictions_tta)
         np.save(export_dir/'outoffolds_tta', outoffolds_tta)
-    
     score = roc_auc_score(valid['target'].values, oof)
     score_tta =  roc_auc_score(valid['target'].values, oof_tta)
     LOGGER(f'score: {score:.5f}')

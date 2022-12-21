@@ -27,7 +27,10 @@ class ToSpectrogram(ImageOnlyTransform):
         super().__init__(always_apply, p)
 
     def apply(self, img: np.ndarray, **params): # img: (freq, t, ch)
-        return img.real ** 2 + img.imag ** 2
+        if np.iscomplexobj(img):
+            return img.real ** 2 + img.imag ** 2
+        else:
+            return img
 
     def get_transform_init_args_names(self):
         return ()

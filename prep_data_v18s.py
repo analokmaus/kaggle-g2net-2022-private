@@ -51,7 +51,7 @@ def make_signal(gid):
         "Tsft": 1800,
         "SFTWindowType": "tukey",
         "SFTWindowBeta": 0.01,
-        "Band": 0.2
+        "Band": 0.3
     }
     signal_kwargs = {
         "F0": freqs[0],
@@ -67,6 +67,7 @@ def make_signal(gid):
     writer = pyfstat.Writer(**writer_kwargs, **signal_kwargs)
     writer.make_data()
     _, ts, sft = get_sft_as_arrays(writer.sftfilepath)
+    sft['H1'] = sft['H1'][90:450, :]
     shutil.rmtree(TMP_DIR)
     return ts, sft, dict(
         signal_kwargs, **{'signal_depth': signal_depth}
@@ -74,8 +75,9 @@ def make_signal(gid):
 
 
 def generate_sample(index, test, iteration=0):
-    np.random.RandomState(index)
-    np.random.seed(index)
+    offset = iteration * len(test)
+    np.random.RandomState(offset+index)
+    np.random.seed(offset+index)
     test_id = test['id'].values[index]
     try:
         ts, sft, signal_info = make_signal(test_id)
