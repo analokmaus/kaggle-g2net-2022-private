@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import pickle
 from pathlib import Path
 from scipy.stats import norm
+from scipy import ndimage
 
 
 '''
@@ -877,6 +878,7 @@ class G2Net2022Dataset888(D.Dataset):
         fillna=False,
         is_test=False,
         shift_range=(-150, 150),
+        rotate_range=(0, 0),
         preprocess=None,
         transforms=None,
         return_mask=None,
@@ -892,6 +894,7 @@ class G2Net2022Dataset888(D.Dataset):
         self.match = match_time
         self.fillna = fillna
         self.shift_range = shift_range
+        self.rotate_range = rotate_range
         self.preprocess = preprocess
         self.transforms = transforms
         self.is_test = is_test
@@ -1020,6 +1023,9 @@ class G2Net2022Dataset888(D.Dataset):
             spec_s[:shift_y, :] = 0
         else:
             spec_s[shift_y:, :] = 0
+        if self.rotate_range[0] != 0 or self.rotate_range[0] != 0:
+            rotate_ang = np.random.randint(*self.rotate_range)
+            spec_s = ndimage.rotate(spec_s, rotate_ang, reshape=False)
         spec_s *= self.signal_amp[min(self._epoch, len(self.signal_amp)-1)]
         return spec_s
 
@@ -1110,6 +1116,7 @@ class G2Net2022Dataset8888(D.Dataset):
         fillna=False,
         is_test=False,
         shift_range=(-150, 150),
+        rotate_range=(0, 0),
         preprocess=None,
         transforms=None,
         return_mask=None,
@@ -1125,6 +1132,7 @@ class G2Net2022Dataset8888(D.Dataset):
         self.match = match_time
         self.fillna = fillna
         self.shift_range = shift_range
+        self.rotate_range = rotate_range
         self.preprocess = preprocess
         self.transforms = transforms
         self.is_test = is_test
@@ -1255,6 +1263,9 @@ class G2Net2022Dataset8888(D.Dataset):
             sft_s[:shift_y, :] = 0
         else:
             sft_s[shift_y:, :] = 0
+        if self.rotate_range[0] != 0 or self.rotate_range[0] != 0:
+            rotate_ang = np.random.randint(*self.rotate_range)
+            sft_s = ndimage.rotate(sft_s, rotate_ang, reshape=False)
         sft_s *= self.signal_amp[min(self._epoch, len(self.signal_amp)-1)]
         return sft_s
 
@@ -1303,7 +1314,7 @@ class G2Net2022Dataset8888(D.Dataset):
                 img = noise_spec
                 signal_mask = np.zeros((img.shape[0], img.shape[1], 1), dtype=np.float32)
                 target = torch.tensor([0]).float()
-            img = img.real**2 + img.imag**2
+            img = (img.real**2 + img.imag**2).astype(np.float32)
 
         if self.preprocess:
             if self.return_mask:

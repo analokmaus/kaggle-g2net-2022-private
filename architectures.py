@@ -174,6 +174,14 @@ class ClassificationModel(nn.Module):
                 nn.GELU(),
             )
             cls_in_chans = 128
+        elif custom_preprocess == 'debias_large':
+            self.preprocess = nn.Sequential(
+                nn.Conv2d(2, 64, kernel_size=(15,31), stride=(1,2), padding=(15//2,31//2)),
+                nn.GELU(),
+                nn.Conv2d(64, 128, kernel_size=(5,5), stride=(1,2), padding=(5//2,5//2)),
+                nn.GELU(),
+            )
+            cls_in_chans = 128
         else:
             self.preprocess = nn.Identity()
             cls_in_chans = in_chans
