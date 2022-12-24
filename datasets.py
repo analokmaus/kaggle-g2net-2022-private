@@ -9,6 +9,7 @@ import pickle
 from pathlib import Path
 from scipy.stats import norm
 from scipy import ndimage
+import cv2
 
 
 '''
@@ -1117,6 +1118,7 @@ class G2Net2022Dataset8888(D.Dataset):
         is_test=False,
         shift_range=(-150, 150),
         rotate_range=(0, 0),
+        amp_range=(1.0, 1.0),
         preprocess=None,
         transforms=None,
         return_mask=None,
@@ -1133,6 +1135,7 @@ class G2Net2022Dataset8888(D.Dataset):
         self.fillna = fillna
         self.shift_range = shift_range
         self.rotate_range = rotate_range
+        self.amp_range = amp_range
         self.preprocess = preprocess
         self.transforms = transforms
         self.is_test = is_test
@@ -1157,13 +1160,13 @@ class G2Net2022Dataset8888(D.Dataset):
         if r['id'] in self.cache.keys() and self.is_test:
             spec_h1, spec_l1, time_h1, time_l1 = self.cache[r['id']]
         else:
-            if 'path' in r.index:
-                fname = r['path']
-            else:
-                if self.is_test:
+            if self.is_test:
+                if 'path' in r.index:
+                    fname = r['path']
+                else:
                     fname = self.data_dir/f'{r.id}.pickle'
-                else: # in training always read test file
-                    fname = self.test_dir/f'{r.base_id}.pickle'
+            else: # in training always read test file
+                fname = self.test_dir/f'{r.base_id}.pickle'
 
             with open(fname, 'rb') as f:
                 data = pickle.load(f)
@@ -1266,6 +1269,9 @@ class G2Net2022Dataset8888(D.Dataset):
         if self.rotate_range[0] != 0 or self.rotate_range[0] != 0:
             rotate_ang = np.random.randint(*self.rotate_range)
             sft_s = ndimage.rotate(sft_s, rotate_ang, reshape=False)
+        if self.amp_range[0] != 1 or self.amp_range[0] != 1:
+            amp = np.random.uniform(*self.amp_range)
+            sft_s *= amp
         sft_s *= self.signal_amp[min(self._epoch, len(self.signal_amp)-1)]
         return sft_s
 
@@ -1277,7 +1283,7 @@ class G2Net2022Dataset8888(D.Dataset):
             signal_mask = np.zeros((noise.shape[0], noise.shape[1]), dtype=np.float32)
             if self.return_mask:
                 signal = signal.real**2 + signal.imag**2
-                signal_bin = ((signal - signal.min()) / (signal.max() - signal.min()) > 0.25).astype(np.float32)   
+                signal_bin = ((signal - signal.min()) / (signal.max() - signal.min() + 1e-6) > 0.25).astype(np.float32)   
                 signal_mask[:, frame_h1[frame_h1 < 5760]] = signal_bin[:360, frame_h1[frame_h1 < 5760]]
                 signal_mask[:, frame_l1[frame_l1 < 5760]] = signal_bin[:360, frame_l1[frame_l1 < 5760]]
         else:
@@ -1286,7 +1292,7 @@ class G2Net2022Dataset8888(D.Dataset):
             signal_mask = np.zeros((noise.shape[0], noise.shape[1]), dtype=np.float32)
             if self.return_mask:
                 signal = signal.real**2 + signal.imag**2
-                signal_bin = ((signal - signal.min()) / (signal.max() - signal.min()) > 0.25).astype(np.float32)   
+                signal_bin = ((signal - signal.min()) / (signal.max() - signal.min() + 1e-6) > 0.25).astype(np.float32)   
                 signal_mask[:, :] = signal_bin[:, frame_h1]
                 signal_mask[:, :] = signal_bin[:, frame_l1]
         signal_mask[signal_mask!=signal_mask] = 0

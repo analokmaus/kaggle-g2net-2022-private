@@ -81,6 +81,8 @@ class SegAndClsTrain(SimpleHook):
         target = inputs[2]
         target_mask = inputs[1]
         approx, mask = trainer.model(inputs[0])
+        # if trainer.rank == 0:
+        #     trainer.logger(f'{mask.shape} {target_mask.shape}')
         loss = trainer.criterion(approx, target, mask, target_mask)
         return loss, approx.detach()
 

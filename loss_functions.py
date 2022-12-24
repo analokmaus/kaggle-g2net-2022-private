@@ -90,12 +90,7 @@ class BCEWithLogitsAux(nn.Module):
         if input_mask is None:
             return bce_loss
         else:
-            if input_mask.shape[-1] !=  target_mask.shape[-1]:
-                bs, c, h, w= target_mask.shape
-                target_mask = target_mask.view(bs, c, h, w//4, 4).mean(4)
-                aux_loss = self.aux(input_mask, target_mask)
-            else:
-                aux_loss = self.aux(input_mask, target_mask)
+            aux_loss = self.aux(input_mask, target_mask)
             return bce_loss * self.weight[0] + aux_loss * self.weight[1]
     
     def __repr__(self):
