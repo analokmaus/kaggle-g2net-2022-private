@@ -5,20 +5,81 @@ import timm
 
 import segmentation_models_pytorch as smp
 from modules import *
+from ffc_fix import FFC_BN_ACT
 
 from kuma_utils.torch.modules import AdaptiveConcatPool2d, GeM, AdaptiveGeM
 from kuma_utils.torch.utils import freeze_module
 
 
 '''
-Codes from previous G2Net
+Common
 '''
+def get_preprocess(name):
+    if name == 'chris_debias':
+        preprocess = nn.Sequential(
+            nn.Conv2d(2, 64, kernel_size=(3,31), stride=(1,2), padding=(3//2,31//2)),
+            nn.GELU(),
+            nn.Conv2d(64, 128, kernel_size=(5,5), stride=(1,2), padding=(5//2,5//2)),
+            nn.GELU(),
+        )
+        out_chans = 128
+    elif name == 'debias_large':
+        preprocess = nn.Sequential(
+            nn.Conv2d(2, 64, kernel_size=(7, 39), stride=(1,2), padding=(15//2,31//2)),
+            nn.GELU(),
+            nn.Conv2d(64, 128, kernel_size=(5,5), stride=(1,2), padding=(5//2,5//2)),
+            nn.GELU(),
+        )
+        out_chans = 128
+    elif name == 'debias_small':
+        preprocess = nn.Sequential(
+            nn.Conv2d(2, 64, kernel_size=(7, 21), stride=(1, 2), padding=(7//2, 21//2)),
+            nn.GELU(),
+            nn.Conv2d(64, 128, kernel_size=(5,5), stride=(1,2), padding=(5//2,5//2)),
+            nn.GELU(),
+        )
+        out_chans = 128
+    elif name == 'debias_raw_65':
+        preprocess = nn.Sequential(
+            nn.Conv2d(2, 64, kernel_size=(7, 65), stride=(1,2), padding=(7//2, 65//2)),
+            nn.GELU(),
+            nn.Conv2d(64, 128, kernel_size=(7, 7), stride=(1,2), padding=(7//2, 7//2)),
+            nn.GELU(),
+        )
+        out_chans = 128
+    elif name == 'debias_raw_65_str4':
+        preprocess = nn.Sequential(
+            nn.Conv2d(2, 64, kernel_size=(7, 65), stride=(1,4), padding=(7//2, 65//2)),
+            nn.GELU(),
+            nn.Conv2d(64, 128, kernel_size=(7, 7), stride=(1,2), padding=(7//2, 7//2)),
+            nn.GELU(),
+        )
+        out_chans = 128
+    elif name == 'debias_3x31_2':
+        preprocess = nn.Sequential(
+            nn.Conv2d(2, 64, kernel_size=(3,31), stride=(1,2), padding=(3//2,31//2)),
+            nn.GELU(),
+        )
+        out_chans = 64
+    elif name == 'ffc_15':
+        preprocess = nn.Sequential(
+            FFC_BN_ACT(
+                2, 64, kernel_size=15, stride=1, padding=15//2, ratio_gin=0.5, ratio_gout=0.5),
+            nn.Conv2d(64, 128, kernel_size=(5, 5), stride=(1, 2), padding=(7//2, 7//2)),
+            nn.GELU(),
+        )
+        out_chans = 128
+    else:
+        preprocess = nn.Identity()
+        out_chans = 2
+    
+    return preprocess, out_chans
 
 
 '''
 New
 '''
-class SimpleCNN(nn.Module):
+class SimpleCNN(nn.Module): # do NOT use
 
     def __init__(self, 
                  model_name='tf_efficientnet_b0', 
@@ -166,41 +227,7 @@ class ClassificationModel(nn.Module):
 
         super().__init__()
 
-        if custom_preprocess == 'chris_debias':
-            self.preprocess = nn.Sequential(
-                nn.Conv2d(2, 64, kernel_size=(3,31), stride=(1,2), padding=(3//2,31//2)),
-                nn.GELU(),
-                nn.Conv2d(64, 128, kernel_size=(5,5), stride=(1,2), padding=(5//2,5//2)),
-                nn.GELU(),
-            )
-            cls_in_chans = 128
-        elif custom_preprocess == 'debias_large':
-            self.preprocess = nn.Sequential(
-                nn.Conv2d(2, 64, kernel_size=(15,31), stride=(1,2), padding=(15//2,31//2)),
-                nn.GELU(),
-                nn.Conv2d(64, 128, kernel_size=(5,5), stride=(1,2), padding=(5//2,5//2)),
-                nn.GELU(),
-            )
-            cls_in_chans = 128
-        elif custom_preprocess == 'debias_small':
-            self.preprocess = nn.Sequential(
-                nn.Conv2d(2, 64, kernel_size=(7, 21), stride=(1, 2), padding=(7//2, 21//2)),
-                nn.GELU(),
-                nn.Conv2d(64, 128, kernel_size=(5,5), stride=(1,2), padding=(5//2,5//2)),
-                nn.GELU(),
-            )
-            cls_in_chans = 128
-        elif custom_preprocess == 'debias_raw_65':
-            self.preprocess = nn.Sequential(
-                nn.Conv2d(2, 64, kernel_size=(7, 65), stride=(1,2), padding=(7//2, 65//2)),
-                nn.GELU(),
-                nn.Conv2d(64, 128, kernel_size=(7, 7), stride=(1,2), padding=(7//2, 7//2)),
-                nn.GELU(),
-            )
-            cls_in_chans = 128
-        else:
-            self.preprocess = nn.Identity()
-            cls_in_chans = in_chans
+        self.preprocess, cls_in_chans = get_preprocess(custom_preprocess)
         
         self.classification_model = timm.create_model(
             classification_model,
@@ -278,17 +305,7 @@ class SegmentationAndClassification(nn.Module):
         self.return_mask = return_mask
         self.concat = concat_original
 
-        if custom_preprocess == 'chris_debias':
-            self.preprocess = nn.Sequential(
-                nn.Conv2d(2, 64, kernel_size=(3,31), stride=(1,2), padding=(3//2,31//2)),
-                nn.GELU(),
-                nn.Conv2d(64, 128, kernel_size=(5,5), stride=(1,2), padding=(5//2,5//2)),
-                nn.GELU(),
-            )
-            seg_in_chans = 128
-        else:
-            self.preprocess = nn.Identity()
-            seg_in_chans = in_chans
+        self.preprocess, seg_in_chans = get_preprocess(custom_preprocess)
 
         self.segmentation_model = smp.Unet(
             encoder_name=segmentation_model,
@@ -334,10 +351,10 @@ class SegmentationAndClassification(nn.Module):
 
     def forward(self, x):
         mask = self.segmentation_model(self.preprocess(x))
-        
+
         if self.concat:
             if mask.shape[3] != x.shape[3]:
-                mask =  F.interpolate(mask, size=(mask.shape[2], mask.shape[3]*4))
+                mask =  F.interpolate(mask, size=(mask.shape[2], x.shape[3]))
             output = torch.cat([x, mask], axis=1)
         else:
             output = mask

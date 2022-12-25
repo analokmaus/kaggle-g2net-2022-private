@@ -1041,6 +1041,110 @@ class Ds18mod2(Ds18prep3):
     )
 
 
+class Ds18mod3(Ds18prep3):
+    name = 'ds_18_mod3'
+    model_params = dict(
+        classification_model='tf_efficientnet_b7_ns',
+        in_chans=2,
+        num_classes=1,
+        custom_preprocess='debias_3x31_2',
+        custom_classifier='avg',
+        pretrained=True
+    )
+
+
+class Ds18mod4(Ds18prep3):
+    name = 'ds_18_mod4'
+    model_params = dict(
+        classification_model='tf_efficientnet_b7_ns',
+        in_chans=2,
+        num_classes=1,
+        custom_preprocess='ffc_15',
+        custom_classifier='avg',
+        pretrained=True
+    )
+
+
+class Ds18res0(Ds18prep3):
+    name = 'ds_18_res0'
+    dataset_params = dict(
+        preprocess=A.Compose([
+            AdaptiveResize(img_size=720), ClipSignal(0, 20), NormalizeSpectrogram('column_wise')]),
+        match_time=True,
+        return_mask=False,
+        positive_p=2/3,
+        signal_amplifier=np.linspace(2.0, 1.0, 10),
+        shift_range=(-120, 120),
+        test_stat=Path('input/signal_stat.pickle'),
+        test_dir=Path('input/g2net-detecting-continuous-gravitational-waves/test/')
+       )
+    transforms = dict(
+        train=A.Compose([
+            A.HorizontalFlip(p=0.5),
+            A.VerticalFlip(p=0.5),
+            RandomAmplify(p=0.25),
+            ToTensorV2(),
+            FrequencyMaskingTensor(24, p=0.5),
+            FrequencyMaskingTensor(24, p=0.5),
+            FrequencyMaskingTensor(24, p=0.5),
+            TimeMaskingTensor(100, p=0.5),
+            TimeMaskingTensor(100, p=0.5),
+            TimeMaskingTensor(100, p=0.5),]),
+        test=A.Compose([
+            ToTensorV2()]),
+        tta=A.Compose([
+            ToTensorV2()]),
+    )
+    model_params = dict(
+        classification_model='tf_efficientnet_b7_ns',
+        in_chans=2,
+        num_classes=1,
+        custom_preprocess='debias_raw_65',
+        custom_classifier='avg',
+        pretrained=True
+    )
+
+
+class Ds18res1(Ds18res0):
+    name = 'ds_18_res1'
+    dataset_params = dict(
+        preprocess=A.Compose([
+            AdaptiveResize(img_size=1440), ClipSignal(0, 20), NormalizeSpectrogram('column_wise')]),
+        match_time=True,
+        return_mask=False,
+        positive_p=2/3,
+        signal_amplifier=np.linspace(2.0, 1.0, 10),
+        shift_range=(-120, 120),
+        test_stat=Path('input/signal_stat.pickle'),
+        test_dir=Path('input/g2net-detecting-continuous-gravitational-waves/test/')
+       )
+    transforms = dict(
+        train=A.Compose([
+            A.HorizontalFlip(p=0.5),
+            A.VerticalFlip(p=0.5),
+            RandomAmplify(p=0.25),
+            ToTensorV2(),
+            FrequencyMaskingTensor(24, p=0.5),
+            FrequencyMaskingTensor(24, p=0.5),
+            FrequencyMaskingTensor(24, p=0.5),
+            TimeMaskingTensor(180, p=0.5),
+            TimeMaskingTensor(180, p=0.5),
+            TimeMaskingTensor(180, p=0.5),]),
+        test=A.Compose([
+            ToTensorV2()]),
+        tta=A.Compose([
+            ToTensorV2()]),
+    )
+    model_params = dict(
+        classification_model='tf_efficientnet_b7_ns',
+        in_chans=2,
+        num_classes=1,
+        custom_preprocess='debias_raw_65_str4',
+        custom_classifier='avg',
+        pretrained=True
+    )
+
+
 class Ds19(Ds18prep3):
     name = 'ds_19'
     train_path = Path('input/g2net-detecting-continuous-gravitational-waves/concat_v18s_v23s.csv')
@@ -1090,6 +1194,20 @@ class Ds19prep0(Ds19):
         tta=A.Compose([
             ToTensorV2()]),
     )
+
+
+class Ds19prep0l(Ds19prep0):
+    name = 'ds_19_prep0_l'
+    num_epochs = 10
+    weight_path = Path('results/ds_19_prep0/fold0.pt')
+
+
+class Ds19sch0(Ds19prep0):
+    name = 'ds_19_sch0'
+    num_epochs = 20
+    optimizer_params = dict(lr=5e-4, weight_decay=1e-6)
+    scheduler = CosineAnnealingWarmRestarts
+    scheduler_params = dict(T_0=20, T_mult=1, eta_min=1e-6)
 
 
 class Mixup03(Ds09val1):
@@ -1269,7 +1387,7 @@ class Model03(Ds18prep3):
         tta=A.Compose([
             ClipSignal(-10, 10), ToTensorV2(transpose_mask=True)]),
     )
-    
+
 
 class Model03mod0(Model03):
     name = 'model_03_mod0'
@@ -1284,3 +1402,74 @@ class Model03mod0(Model03):
         return_mask=True,
         pretrained=True
     )
+
+
+class Model04(Model03):
+    name = 'model_04'
+    dataset_params = dict(
+        preprocess=A.Compose([
+            AdaptiveResize(img_size=256), 
+            ClipSignal(0, 15), 
+            NormalizeSpectrogram('column_wise'), 
+            Crop352()]),
+        match_time=True,
+        return_mask=True,
+        positive_p=2/3,
+        signal_amplifier=np.linspace(2.0, 1.0, 10),
+        shift_range=(-120, 120),
+        test_stat=Path('input/signal_stat.pickle'),
+        test_dir=Path('input/g2net-detecting-continuous-gravitational-waves/test/')
+    )
+    train_path = Path('input/g2net-detecting-continuous-gravitational-waves/concat_v18s_v23s.csv')
+    train_dir = None
+    valid_path = Path('input/g2net-detecting-continuous-gravitational-waves/v23v.csv')
+    num_epochs = 30
+    transforms = dict(
+        train=A.Compose([
+            A.HorizontalFlip(p=0.5),
+            A.VerticalFlip(p=0.5),
+            RandomAmplify(p=0.25),
+            ToTensorV2(transpose_mask=True),
+            FrequencyMaskingTensor(24, p=0.5),
+            FrequencyMaskingTensor(24, p=0.5),
+            FrequencyMaskingTensor(24, p=0.5),
+            TimeMaskingTensor(48, p=0.5),
+            TimeMaskingTensor(48, p=0.5),
+            TimeMaskingTensor(48, p=0.5),]),
+        test=A.Compose([ToTensorV2(transpose_mask=True)]),
+        tta=A.Compose([ToTensorV2(transpose_mask=True)]),
+    )
+
+
+class Model04prep0(Model04):
+    name = 'model_04_prep0'
+    dataset_params = dict(
+        preprocess=A.Compose([
+            AdaptiveResize(img_size=512), 
+            ClipSignal(0, 15), 
+            NormalizeSpectrogram('column_wise'), 
+            Crop352()]),
+        match_time=True,
+        return_mask=True,
+        positive_p=2/3,
+        signal_amplifier=np.linspace(2.0, 1.0, 10),
+        shift_range=(-120, 120),
+        test_stat=Path('input/signal_stat.pickle'),
+        test_dir=Path('input/g2net-detecting-continuous-gravitational-waves/test/')
+    )
+    transforms = dict(
+        train=A.Compose([
+            A.HorizontalFlip(p=0.5),
+            A.VerticalFlip(p=0.5),
+            RandomAmplify(p=0.25),
+            ToTensorV2(transpose_mask=True),
+            FrequencyMaskingTensor(24, p=0.5),
+            FrequencyMaskingTensor(24, p=0.5),
+            FrequencyMaskingTensor(24, p=0.5),
+            TimeMaskingTensor(96, p=0.5),
+            TimeMaskingTensor(96, p=0.5),
+            TimeMaskingTensor(96, p=0.5),]),
+        test=A.Compose([ToTensorV2(transpose_mask=True)]),
+        tta=A.Compose([ToTensorV2(transpose_mask=True)]),
+    )
+    
