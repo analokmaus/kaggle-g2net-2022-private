@@ -880,10 +880,10 @@ class G2Net2022Dataset888(D.Dataset):
         is_test=False,
         shift_range=(-150, 150),
         rotate_range=(0, 0),
+        amp_range=(1.0, 1.0),
         preprocess=None,
         transforms=None,
         return_mask=None,
-        random_state=0,
         cache_limit=0, # in GB
         ):
         self.df = df
@@ -896,6 +896,7 @@ class G2Net2022Dataset888(D.Dataset):
         self.fillna = fillna
         self.shift_range = shift_range
         self.rotate_range = rotate_range
+        self.amp_range = amp_range
         self.preprocess = preprocess
         self.transforms = transforms
         self.is_test = is_test
@@ -907,8 +908,6 @@ class G2Net2022Dataset888(D.Dataset):
         else:
             self.signal_amp = signal_amplifier
         self._epoch = 0
-        np.random.RandomState(random_state)
-        np.random.seed(random_state)
 
     def __len__(self):
         return len(self.df)
@@ -1009,8 +1008,11 @@ class G2Net2022Dataset888(D.Dataset):
                 fname = self.data_dir/f'{r.id}.pickle'
             with open(fname, 'rb') as f:
                 data = pickle.load(f)
-            sft_s, _ = data['sft']*1e22, data['timestamps']
-            spec_s = sft_s.real**2 + sft_s.imag**2
+            if 'spectrogram' in data.keys(): # simple format
+                spec_s, _ = data['spectrogram'].astype(np.float32), data['timestamps']
+            else:
+                sft_s, _ = data['sft']*1e22, data['timestamps']
+                spec_s = sft_s.real**2 + sft_s.imag**2
 
             if self.cache['size'] < self.cache_limit:
                 self.cache[r['id']] = spec_s
@@ -1025,8 +1027,11 @@ class G2Net2022Dataset888(D.Dataset):
         else:
             spec_s[shift_y:, :] = 0
         if self.rotate_range[0] != 0 or self.rotate_range[0] != 0:
-            rotate_ang = np.random.randint(*self.rotate_range)
-            spec_s = ndimage.rotate(spec_s, rotate_ang, reshape=False)
+            rotate_ang = np.random.uniform(*self.rotate_range)
+            spec_s = ndimage.rotate(spec_s,rotate_ang, reshape=False)
+        if self.amp_range[0] != 1 or self.amp_range[0] != 1:
+            amp = np.random.uniform(*self.amp_range)
+            spec_s *= amp
         spec_s *= self.signal_amp[min(self._epoch, len(self.signal_amp)-1)]
         return spec_s
 
@@ -1122,7 +1127,6 @@ class G2Net2022Dataset8888(D.Dataset):
         preprocess=None,
         transforms=None,
         return_mask=None,
-        random_state=0,
         cache_limit=0, # in GB
         ):
         self.df = df
@@ -1147,8 +1151,6 @@ class G2Net2022Dataset8888(D.Dataset):
         else:
             self.signal_amp = signal_amplifier
         self._epoch = 0
-        np.random.RandomState(random_state)
-        np.random.seed(random_state)
 
     def __len__(self):
         return len(self.df)
@@ -1267,7 +1269,7 @@ class G2Net2022Dataset8888(D.Dataset):
         else:
             sft_s[shift_y:, :] = 0
         if self.rotate_range[0] != 0 or self.rotate_range[0] != 0:
-            rotate_ang = np.random.randint(*self.rotate_range)
+            rotate_ang = np.random.uniform(*self.rotate_range)
             sft_s = ndimage.rotate(sft_s, rotate_ang, reshape=False)
         if self.amp_range[0] != 1 or self.amp_range[0] != 1:
             amp = np.random.uniform(*self.amp_range)

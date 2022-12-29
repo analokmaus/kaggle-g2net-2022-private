@@ -41,7 +41,7 @@ class NormalizeSpectrogram(ImageOnlyTransform):
         super().__init__(always_apply, p)
         assert method in [
             'mean', 'constant', 'median', 'concat', 'chris', 
-            'column_wise', 'row_wise', 'column_row_wise']
+            'column_wise', 'row_wise', 'column_row_wise', 'column_wise_sqrt']
         self.method = method
 
     def apply(self, img: np.ndarray, **params): # img: (freq, t, ch)
@@ -67,6 +67,11 @@ class NormalizeSpectrogram(ImageOnlyTransform):
         elif self.method == 'column_wise':
             for ch in range(img.shape[2]):
                 img[:, :, ch] /= img[:, :, ch].mean() 
+                img[:, :, ch] -= img[:, :, ch].mean(axis=0)[None, :]
+                img[:, :, ch] /= (img[:, :, ch].std(axis=0)[None, :] + 1e-6)
+        elif self.method == 'column_wise_sqrt':
+            for ch in range(img.shape[2]):
+                img[:, :, ch] = np.sqrt(img[:, :, ch])
                 img[:, :, ch] -= img[:, :, ch].mean(axis=0)[None, :]
                 img[:, :, ch] /= (img[:, :, ch].std(axis=0)[None, :] + 1e-6)
         elif self.method == 'row_wise':

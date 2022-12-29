@@ -55,6 +55,14 @@ def get_preprocess(name):
             nn.GELU(),
         )
         out_chans = 128
+    elif name == 'debias_raw_65_str8':
+        preprocess = nn.Sequential(
+            nn.Conv2d(2, 64, kernel_size=(7, 65), stride=(1,8), padding=(7//2, 65//2)),
+            nn.GELU(),
+            nn.Conv2d(64, 128, kernel_size=(7, 7), stride=(1,2), padding=(7//2, 7//2)),
+            nn.GELU(),
+        )
+        out_chans = 128
     elif name == 'debias_3x31_2':
         preprocess = nn.Sequential(
             nn.Conv2d(2, 64, kernel_size=(3,31), stride=(1,2), padding=(3//2,31//2)),

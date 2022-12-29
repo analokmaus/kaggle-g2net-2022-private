@@ -29,6 +29,10 @@ from utils import print_config, notify_me
 from training_extras import make_tta_dataloader
 
 
+def worker_init_fn(worker_id):                                                          
+    np.random.seed(np.random.get_state()[1][0] + worker_id)
+
+
 def inference(data_loader, tta=False):
     predictions = []
     predictions_tta = []
@@ -165,10 +169,11 @@ if __name__ == "__main__":
 
         train_loader = D.DataLoader(
             train_data, batch_size=cfg.batch_size, shuffle=True,
-            num_workers=opt.num_workers, pin_memory=False)
+            num_workers=opt.num_workers, pin_memory=True, 
+            worker_init_fn=worker_init_fn)
         valid_loader = D.DataLoader(
             valid_data, batch_size=cfg.batch_size, shuffle=False,
-            num_workers=opt.num_workers, pin_memory=False)
+            num_workers=opt.num_workers, pin_memory=True)
 
         model = cfg.model(**cfg.model_params)
 
@@ -242,15 +247,20 @@ if __name__ == "__main__":
         **dict(cfg.dataset_params, **{'cache_limit': 0}))
     test_loader = D.DataLoader(
             test_data, batch_size=cfg.batch_size, shuffle=False, 
-            num_workers=opt.num_workers, pin_memory=False)
+            num_workers=opt.num_workers, pin_memory=True)
+    if cfg.valid2_path is not None:
+        valid =  pd.read_csv(cfg.valid2_path)
+        valid_dir = cfg.valid2_dir
+    else:
+        valid = valid
+        valid_dir = cfg.valid_dir
     valid_data = cfg.dataset(
-        df=valid, data_dir = cfg.valid_dir,
+        df=valid, data_dir = valid_dir,
         transforms=cfg.transforms['tta'], is_test=True, 
-        **dict(cfg.dataset_params, **{'cache_limit': opt.cache_limit/5}))
-    valid_data.cache = cache_valid
+        **dict(cfg.dataset_params, **{'cache_limit': 0}))
     valid_loader = D.DataLoader(
         valid_data, batch_size=cfg.batch_size, shuffle=False,
-        num_workers=opt.num_workers, pin_memory=False)
+        num_workers=opt.num_workers, pin_memory=True)
 
     if not (export_dir/f'fold{fold}.pt').exists():
         LOGGER(f'fold{fold}.pt missing. No target to predict.')
