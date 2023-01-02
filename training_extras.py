@@ -109,6 +109,18 @@ class StepDataset(CallbackTemplate):
         loader.dataset.step()
 
 
+class UnfreezeFilter(CallbackTemplate):
+
+    def __init__(self, epoch=0):
+        super().__init__()
+        self.epoch = epoch
+    
+    def before_epoch(self, env, loader, loader_valid):
+        epoch = env.state['epoch'] # local epoch
+        if epoch == self.epoch:
+            env.model.module.unfreeze_filter()
+
+
 def make_tta_dataloader(loader, dataset, dataset_params):
     skip_keys = ['dataset', 'sampler', 'batch_sampler', 'dataset_kind']
     dl_args = {

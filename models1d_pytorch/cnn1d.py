@@ -12,6 +12,7 @@ class CNN1d(nn.Module):
                  num_classes: int = 1, 
                  hidden_dims: tuple = (8, 16, 32, 64), 
                  kernel_size: int = 3,
+                 stride: int = 1,
                  reinit: bool = False):
 
         super().__init__()
@@ -21,7 +22,8 @@ class CNN1d(nn.Module):
             nn.Conv1d(in_channels=in_channels,
                       out_channels=hidden_dims[0],
                       kernel_size=kernel_size,
-                      padding='same'),
+                      stride=stride,
+                      padding=kernel_size//2),
             nn.BatchNorm1d(hidden_dims[0]),
             nn.SiLU(inplace=True))
         
@@ -30,7 +32,8 @@ class CNN1d(nn.Module):
                 nn.Conv1d(in_channels=hidden_dims[i],
                           out_channels=hidden_dims[i+1],
                           kernel_size=kernel_size,
-                          padding='same'),
+                          stride=stride,
+                          padding=kernel_size//2),
                 nn.BatchNorm1d(hidden_dims[i+1]),
                 nn.SiLU(inplace=True)
             )

@@ -4,6 +4,7 @@ import torch.nn.functional as F
 import timm
 
 import segmentation_models_pytorch as smp
+from models1d_pytorch import ResNet1D, CNN1d
 from modules import *
 from ffc_fix import FFC_BN_ACT
 
@@ -376,3 +377,152 @@ class SegmentationAndClassification(nn.Module):
             return output, mask
         else:
             return output
+
+
+class MatchedFilterModel(nn.Module):
+
+    def __init__(self,
+            wave_bank_path,
+            filter_height=90,
+            resize_factor=1,
+            num_filters=1024,
+            filter_method='sum',
+            classification_model='resnet18',
+            classification_params={},
+            in_chans=2,
+            num_classes=1,
+            custom_classifier='none',
+            custom_attention='none', 
+            dropout=0,
+            pretrained=False):
+
+        super().__init__()
+        
+        wave_bank = torch.load(wave_bank_path, 'cpu')
+        wave_bank = wave_bank[:, 180-filter_height//2:180+filter_height//2+1, :]
+        num_filters_0, filter_height, filter_width = wave_bank.shape
+        if filter_method == 'sum':
+            wave_bank = wave_bank.reshape(num_filters, num_filters_0//num_filters, filter_height, filter_width)
+            wave_bank = wave_bank.sum(1)
+        else:
+            wave_bank = wave_bank[:num_filters]
+        wave_bank = torch.stack([wave_bank, wave_bank], dim=1) # (num_filters, 2, filter_height, filter_width)
+        self.filter = torch.nn.Conv2d(
+            in_chans, num_filters, kernel_size=(filter_height, filter_width), stride=1, padding=(filter_height//2, 0), bias=False)
+        self.filter.weight = nn.Parameter(wave_bank)
+        self.freeze_filter()
+        self.resize_f = resize_factor
+        del wave_bank
+        
+        self.classification_model = timm.create_model(
+            classification_model,
+            pretrained=pretrained,
+            in_chans=1,
+            num_classes=num_classes,
+            **classification_params
+        )
+        feature_dim = self.classification_model.get_classifier().in_features
+        self.classification_model.reset_classifier(0, '')
+
+        if custom_attention == 'triplet':
+            self.attention = TripletAttention()
+        else:
+            self.attention = nn.Identity()
+
+        if custom_classifier == 'avg':
+            self.global_pool = nn.AdaptiveAvgPool2d((1, 1))
+        elif custom_classifier == 'max':
+            self.global_pool = nn.AdaptiveMaxPool2d((1, 1))
+        elif custom_classifier == 'concat':
+            self.global_pool = AdaptiveConcatPool2d()
+            feature_dim = feature_dim * 2
+        elif custom_classifier == 'gem':
+            self.global_pool = GeM(p=3, eps=1e-4)
+        else:
+            self.global_pool = nn.AdaptiveAvgPool2d((1, 1))
+        
+        if 'Transformer' in self.classification_model.__class__.__name__:
+            self.classification_model.patch_embed = CustomHybdridEmbed(
+                self.classification_model.patch_embed.proj, 
+                channel_in=1,
+                transformer_original_input_size=(1, 1, *self.classification_model.patch_embed.img_size)
+            )
+            self.is_tranformer = True
+        else:
+            self.is_tranformer = False
+
+        self.head = nn.Sequential(
+            Flatten(),
+            nn.Linear(feature_dim, 512), 
+            nn.Dropout(dropout) if dropout > 0 else nn.Identity(),
+            nn.ReLU(inplace=True), 
+            nn.Linear(512, num_classes))
+
+    def forward(self, x):
+        output = self.filter(x) # (bs, num_filters, 360, 1)
+        output = output.squeeze(-1).permute(0, 2, 1).unsqueeze(1) # (bs, 1, 360, num_filters)
+        if self.resize_f > 1:
+            output = F.interpolate(output, scale_factor=(1, self.resize_f), mode='bilinear')
+        output = self.classification_model(output)
+        output = self.attention(output)
+        if self.is_tranformer:
+            output = output.mean(dim=1)
+        else:
+            output = self.global_pool(output)
+        output = self.head(output)
+        return output
+
+    def freeze_filter(self):
+        freeze_module(self.filter)
+
+    def unfreeze_filter(self):
+        for i, param in enumerate(self.filter.parameters()):
+            param.requires_grad = True
+        
+
+class MatchedFilterModel1d(nn.Module):
+
+    def __init__(self,
+            wave_bank_path,
+            filter_height=90,
+            resize_factor=1,
+            num_filters=1024,
+            filter_method='sum',
+            in_chans=2,
+            num_classes=1,
+            hidden_dims=[1024, 512, 256, 128],
+            stride=1):
+
+        super().__init__()
+        
+        wave_bank = torch.load(wave_bank_path, 'cpu')
+        wave_bank = wave_bank[:, 180-filter_height//2:180+filter_height//2+1, :]
+        num_filters_0, filter_height, filter_width = wave_bank.shape
+        if filter_method == 'sum':
+            wave_bank = wave_bank.reshape(num_filters, num_filters_0//num_filters, filter_height, filter_width)
+            wave_bank = wave_bank.sum(1)
+        else:
+            wave_bank = wave_bank[:num_filters]
+        wave_bank = torch.stack([wave_bank, wave_bank], dim=1) # (num_filters, 2, filter_height, filter_width)
+        self.filter = torch.nn.Conv2d(
+            in_chans, num_filters, kernel_size=(filter_height, filter_width), stride=1, padding=(filter_height//2, 0), bias=False)
+        self.filter.weight = nn.Parameter(wave_bank)
+        self.freeze_filter()
+        self.resize_f = resize_factor
+        del wave_bank
+        
+        self.cnn = CNN1d(num_filters, num_classes, hidden_dims=hidden_dims, kernel_size=3, stride=stride, reinit=True)
+
+    def forward(self, x):
+        output = self.filter(x) # (bs, num_filters, 360, 1)
+        output = output.squeeze(-1) # (bs, num_filters, 360)
+        output = self.cnn(output)
+        return output
+
+    def freeze_filter(self):
+        freeze_module(self.filter)
+
+    def unfreeze_filter(self):
+        for i, param in enumerate(self.filter.parameters()):
+            param.requires_grad = True
+        

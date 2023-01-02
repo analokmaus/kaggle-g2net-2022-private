@@ -1388,6 +1388,51 @@ class Ds20l(Ds20):
     weight_path = Path('results/ds_20/fold0.pt')
 
 
+class Ds20mod0(Ds20):
+    name = 'ds_20_mod0'
+    model = ClassificationModel
+    model_params = dict(
+        classification_model='convnext_base_in22ft1k',
+        in_chans=2,
+        num_classes=1,
+        custom_preprocess='chris_debias',
+        custom_classifier='avg',
+        pretrained=True
+    )
+    num_epochs = 40
+    optimizer_params = dict(lr=2e-5, weight_decay=1e-6)
+
+
+class Ds20mod1(Ds20):
+    name = 'ds_20_mod1'
+    model = ClassificationModel
+    model_params = dict(
+        classification_model='inception_v4',
+        in_chans=2,
+        num_classes=1,
+        custom_preprocess='chris_debias',
+        custom_classifier='avg',
+        pretrained=True
+    )
+    num_epochs = 40
+    optimizer_params = dict(lr=5e-4, weight_decay=1e-6)
+
+
+class Ds20mod2(Ds20):
+    name = 'ds_20_mod2'
+    model = ClassificationModel
+    model_params = dict(
+        classification_model='xception65',
+        in_chans=2,
+        num_classes=1,
+        custom_preprocess='chris_debias',
+        custom_classifier='avg',
+        pretrained=True
+    )
+    num_epochs = 40
+    optimizer_params = dict(lr=5e-4, weight_decay=1e-6)
+
+
 class Ds20res0(Ds20):
     name = 'ds_20_res0'
     dataset_params = dict(
@@ -1426,6 +1471,20 @@ class Ds20res0(Ds20):
         custom_classifier='avg',
         pretrained=True
     )
+
+
+class Ds20res1(Ds20res0):
+    name = 'ds_20_res1'
+    model_params = dict(
+        classification_model='xception65',
+        in_chans=2,
+        num_classes=1,
+        custom_preprocess='chris_debias',
+        custom_classifier='avg',
+        pretrained=True
+    )
+    num_epochs = 40
+    optimizer_params = dict(lr=5e-4, weight_decay=1e-6)
 
 
 class Ds21(Ds20):
@@ -1802,3 +1861,219 @@ class Model04prep0(Model04):
         tta=A.Compose([ToTensorV2(transpose_mask=True)]),
     )
     
+
+class Model05(Ds19prep1):
+    name = 'model_05'
+    model = MatchedFilterModel
+    model_params = dict(
+        wave_bank_path='input/g2net-detecting-continuous-gravitational-waves/wave_banks.pt',
+        filter_height=90,
+        num_filters=1024,
+        resize_factor=1,
+        classification_model='tf_efficientnet_b0_ns',
+        in_chans=2,
+        num_classes=1,
+        custom_classifier='avg',
+        pretrained=True
+    )
+    batch_size = 32
+    optimizer_params = dict(lr=5e-4, weight_decay=1e-6)
+
+
+class Model05v0(Model05):
+    name = 'model_05_v0'
+    model_params = dict(
+        wave_bank_path='input/g2net-detecting-continuous-gravitational-waves/wave_banks.pt',
+        filter_height=90,
+        num_filters=512,
+        resize_factor=1,
+        classification_model='tf_efficientnet_b0_ns',
+        in_chans=2,
+        num_classes=1,
+        custom_classifier='avg',
+        pretrained=True
+    )
+
+
+class Model05v1(Model05):
+    name = 'model_05_v1'
+    model_params = dict(
+        wave_bank_path='input/g2net-detecting-continuous-gravitational-waves/wave_banks.pt',
+        filter_height=45,
+        num_filters=2048,
+        resize_factor=1,
+        classification_model='tf_efficientnet_b0_ns',
+        in_chans=2,
+        num_classes=1,
+        custom_classifier='avg',
+        pretrained=True
+    )
+
+
+class Model05v2(Model05):
+    name = 'model_05_v2'
+    model_params = dict(
+        wave_bank_path='input/g2net-detecting-continuous-gravitational-waves/wave_banks.pt',
+        filter_height=135,
+        num_filters=512,
+        resize_factor=1,
+        classification_model='tf_efficientnet_b0_ns',
+        in_chans=2,
+        num_classes=1,
+        custom_classifier='avg',
+        pretrained=True
+    )
+
+
+class Model05v3(Model05):
+    name = 'model_05_v3'
+    model_params = dict(
+        wave_bank_path='input/g2net-detecting-continuous-gravitational-waves/wave_banks.pt',
+        filter_height=90,
+        num_filters=2048,
+        resize_factor=1,
+        filter_method='none',
+        classification_model='tf_efficientnet_b0_ns',
+        in_chans=2,
+        num_classes=1,
+        custom_classifier='avg',
+        pretrained=True
+    )
+
+
+class Model05v4(Model05):
+    name = 'model_05_v4'
+    model_params = dict(
+        wave_bank_path='input/g2net-detecting-continuous-gravitational-waves/wave_banks.pt',
+        filter_height=90,
+        num_filters=4096,
+        resize_factor=1,
+        filter_method='none',
+        classification_model='tf_efficientnet_b0_ns',
+        in_chans=2,
+        num_classes=1,
+        custom_classifier='avg',
+        pretrained=True
+    )
+    batch_size = 16
+    optimizer_params = dict(lr=2e-4, weight_decay=1e-6)
+
+
+class Model05v5(Model05):
+    name = 'model_05_v5'
+    model_params = dict(
+        wave_bank_path='input/g2net-detecting-continuous-gravitational-waves/wave_banks.pt',
+        filter_height=135,
+        num_filters=4096,
+        resize_factor=1,
+        filter_method='none',
+        classification_model='tf_efficientnet_b0_ns',
+        in_chans=2,
+        num_classes=1,
+        custom_classifier='avg',
+        pretrained=True
+    )
+    batch_size = 16
+    optimizer_params = dict(lr=2e-4, weight_decay=1e-6)
+
+
+class Model05mod0(Model05v5):
+    name = 'model_05_mod0'
+    model_params = dict(
+        wave_bank_path='input/g2net-detecting-continuous-gravitational-waves/wave_banks.pt',
+        filter_height=135,
+        num_filters=4096,
+        resize_factor=0.5,
+        filter_method='none',
+        classification_model='tf_efficientnet_b3_ns',
+        in_chans=2,
+        num_classes=1,
+        custom_classifier='avg',
+        pretrained=True
+    )
+
+
+class Model06(Ds19prep1):
+    name = 'model_06'
+    model = MatchedFilterModel
+    model_params = dict(
+        wave_bank_path='input/g2net-detecting-continuous-gravitational-waves/wave_banks.pt',
+        filter_height=90,
+        filter_method='none',
+        num_filters=1024,
+        resize_factor=1,
+        classification_model='tf_efficientnet_b0_ns',
+        in_chans=2,
+        num_classes=1,
+        custom_classifier='avg',
+        pretrained=True
+    )
+    batch_size = 64
+    optimizer_params = dict(lr=5e-4, weight_decay=1e-6)
+    callbacks = [
+        SaveEveryEpoch(),
+        SaveSnapshot(),
+        UnfreezeFilter(0)
+    ]
+    
+
+
+class Model07(Ds19prep1):
+    name = 'model_07'
+    dataset_params = dict(
+        preprocess=A.Compose([
+            AdaptiveResize(img_size=180), ClipSignal(0, 15), 
+            NormalizeSpectrogram('column_wise_sqrt')]),
+        match_time=True,
+        return_mask=False,
+        positive_p=2/3,
+        signal_amplifier=1.0,
+        shift_range=(-120, 120),
+        test_stat=Path('input/signal_stat.pickle'),
+        test_dir=Path('input/g2net-detecting-continuous-gravitational-waves/test/')
+    )
+    transforms = dict(
+        train=A.Compose([
+            A.HorizontalFlip(p=0.5),
+            A.VerticalFlip(p=0.5),
+            RandomAmplify(p=0.25),
+            ToTensorV2(),
+            FrequencyMaskingTensor(24, p=0.5),
+            FrequencyMaskingTensor(24, p=0.5),
+            FrequencyMaskingTensor(24, p=0.5),
+            TimeMaskingTensor(24, p=0.5),
+            TimeMaskingTensor(24, p=0.5),
+            TimeMaskingTensor(24, p=0.5),]),
+        test=A.Compose([
+            ToTensorV2()]),
+        tta=A.Compose([
+            ToTensorV2()]),
+    )
+    model = MatchedFilterModel
+    model_params = dict(
+        wave_bank_path='input/g2net-detecting-continuous-gravitational-waves/wave_banks_180_8192.pt',
+        filter_height=45,
+        filter_method='none',
+        num_filters=8192,
+        resize_factor=0.5,
+        classification_model='tf_efficientnet_b0_ns',
+        in_chans=2,
+        num_classes=1,
+        custom_classifier='avg',
+        pretrained=True
+    )
+    batch_size = 16
+    optimizer_params = dict(lr=2e-4, weight_decay=1e-6)
+
+
+class Model08(Model05v3):
+    name = 'model_08'
+    model = MatchedFilterModel1d
+    model_params = dict(
+        wave_bank_path='input/g2net-detecting-continuous-gravitational-waves/wave_banks.pt',
+        filter_height=90,
+        num_filters=2048,
+        filter_method='none',
+    )
+    batch_size = 32
+    optimizer_params = dict(lr=5e-4, weight_decay=1e-6)

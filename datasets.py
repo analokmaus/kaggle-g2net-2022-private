@@ -1024,8 +1024,8 @@ class G2Net2022Dataset888(D.Dataset):
         spec_s = np.roll(spec_s, shift_y, axis=0)
         if shift_y > 0:
             spec_s[:shift_y, :] = 0
-        else:
-            spec_s[shift_y:, :] = 0
+        elif shift_y < 0:
+            sft_s[shift_y:, :] = 0
         if self.rotate_range[0] != 0 or self.rotate_range[0] != 0:
             rotate_ang = np.random.uniform(*self.rotate_range)
             spec_s = ndimage.rotate(spec_s,rotate_ang, reshape=False)
@@ -1266,7 +1266,7 @@ class G2Net2022Dataset8888(D.Dataset):
         sft_s = np.roll(sft_s, shift_y, axis=0)
         if shift_y > 0:
             sft_s[:shift_y, :] = 0
-        else:
+        elif shift_y < 0:
             sft_s[shift_y:, :] = 0
         if self.rotate_range[0] != 0 or self.rotate_range[0] != 0:
             rotate_ang = np.random.uniform(*self.rotate_range)
